@@ -230,7 +230,7 @@ This is NOT a small, contained feature -- `businessType()`/`unitWord()` (app/app
 <task_item>
   <id>TSK-022</id>
   <source>OWNER_POPUP</source>
-  <status>NEEDS_OWNER_REVIEW</status>
+  <status>READY_FOR_PM</status><!-- SHIPPED by Engineer-Squad 2026-07-25: commit 3ff5e45, PR #75 (merged). Built the recommended default (6th persistent nav tab) since the owner engaged with follow-up asks (Task flow+Calendar merge, tagline) rather than the AskUserQuestion menu -- PR review was the checkpoint, per the loop's own design, and the owner merged it. Nets back to 5 nav tabs after also combining Task flow + Calendar (separate owner request, same PR) into one screen. Full battery clean. See squad-handshake-engineer.md. -->
   <priority>MEDIUM</priority>
   <title>Add a Service/Product shortcut to the bottom nav bar</title>
   <description>Owner asked to add "service/product" to the nav bar.
