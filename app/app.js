@@ -782,6 +782,7 @@ const I18N = {
     // TSK-002/007 More/Settings rebuild: Tools grid, "Set up your business"
     // drill-in group + status pills, and the 4 drill-in sub-page headers.
     tools_grid_title:'Tools',
+    tools_row_title:'Follow-ups, portfolio & research', tools_row_sub:'Stay on top of it · manage your library',
     followups_tool_sub:'Stay on top of it', followups_due_today:'{n} due today',
     portfolio_tool_sub:'Photo & video library', research_tool_sub:'Content library', insights_tool_sub:'On-device analytics',
     biz_setup_group_title:'Set up your business',
@@ -1306,6 +1307,7 @@ const I18N = {
     preferences:'การตั้งค่าทั่วไป', currency:'สกุลเงิน', theme:'ธีม', language:'ภาษา',
     theme_auto:'อัตโนมัติ', theme_light:'สว่าง', theme_dark:'มืด',
     tools_grid_title:'เครื่องมือ',
+    tools_row_title:'ติดตามลูกค้า ผลงาน และคลังความรู้', tools_row_sub:'ติดตามให้ทัน · จัดการคลังของคุณ',
     followups_tool_sub:'ติดตามให้ทัน', followups_due_today:'ครบกำหนดวันนี้ {n} รายการ',
     portfolio_tool_sub:'คลังภาพและวิดีโอ', research_tool_sub:'คลังความรู้', insights_tool_sub:'ข้อมูลเชิงลึกในเครื่อง',
     biz_setup_group_title:'ตั้งค่าธุรกิจของคุณ',
@@ -1937,19 +1939,30 @@ async function enterApp() {
   set('set-goal-quarter', settings.goalTargets.quarter || '');
   set('set-goal-year', settings.goalTargets.year || '');
 
-  // Business type (persona) picker — reintroduced per the 2026 redesign
-  // handoff. Migrates existing installs to 'trainer' (this app's actual base
-  // case up to now, back when it was single-persona-only) so switching over
-  // changes nothing for anyone not deliberately picking a different type.
-  // Business type (persona) picker — reintroduced per the 2026 redesign
-  // handoff, now asked once at first run via a blocking modal instead of
-  // silently defaulting to 'trainer'. Existing installs already have
-  // `businessType` set from the earlier silent-default migration, so this
-  // only ever gates a genuinely new account/device — nobody already using
-  // the app sees it appear. enterApp() returns early here; finishAppBoot()
-  // (below) picks up once a choice is made, in showPersonaOnboard()'s
-  // choosePersonaOnboard() handler.
-  if (!settings.businessType) { showPersonaOnboard(); return; }
+  // TSK-021: the owner asked to stop asking a new account "what kind of
+  // business do you run?" at signup, and stop auto-seeding a starter
+  // Services catalog from that answer. A genuinely new account/device now
+  // defaults straight to 'custom' (BUSINESS_TYPES.custom.seedServices is
+  // already empty, so this seeds nothing) with zero interruption to boot —
+  // businessType()/unitWord()/persona-scoped i18n variants and the
+  // per-persona client tracker all stay fully intact, and still switchable
+  // later via Settings (onBusinessTypeChange() re-runs seedServicesIfEmpty()
+  // for whatever's newly chosen). choosePersonaOnboard() already does
+  // exactly what a manual pick would (set businessType/packageUnitLabel,
+  // the data-work-type attribute, the Settings selects) and calls
+  // finishAppBoot() itself, so reuse it here rather than duplicating that.
+  //
+  // The picker (#modal-persona-onboard) survives ONLY for "Try a demo"
+  // (login.html?demo=1 sets sidekick_start_demo before redirecting in as a
+  // guest) — a prospect choosing their persona there both sets businessType
+  // AND seeds a realistic, persona-flavored demo dataset (see
+  // choosePersonaOnboard() below), which a silent default would defeat the
+  // point of.
+  if (!settings.businessType) {
+    if (sessionStorage.getItem('sidekick_start_demo')) { showPersonaOnboard(); return; }
+    await choosePersonaOnboard('custom');
+    return;
+  }
   document.body.setAttribute('data-work-type', businessType());
   set('set-business-type', businessType());
   if (!settings.packageUnitLabel) await saveSetting('packageUnitLabel', PACKAGE_UNIT_DEFAULTS[businessType()] || 'Units');
@@ -1992,10 +2005,12 @@ async function finishAppBoot() {
   setInterval(checkAndFireNotifications, 60000);
 }
 
-// First-run persona picker (index.html's #modal-persona-onboard). Shown
-// exactly once, only when settings.businessType has never been set —
-// deliberately not dismissible (enterApp() already returned without calling
-// finishAppBoot() above, so nothing else runs until a choice is made here).
+// TSK-021: the persona picker (index.html's #modal-persona-onboard) is now
+// demo-mode only (see enterApp()'s call site) — every real account/guest
+// defaults straight to 'custom' instead. Kept deliberately not dismissible
+// for the demo case it still serves: enterApp() returns early without
+// calling finishAppBoot() above, so nothing else runs until a choice is
+// made here.
 function showPersonaOnboard() {
   const m = document.getElementById('modal-persona-onboard');
   if (m) m.classList.add('open');
@@ -7955,17 +7970,17 @@ function switchScreen(name) {
   if (name === 'services') renderServices();
   if (name === 'pipeline' && typeof renderPipeline === 'function') renderPipeline();
   // TSK-002/007 More/Settings rebuild: the root screen ('more') now only
-  // hosts the account card + Tools grid + "Set up your business" drill-in
-  // rows (with live status pills) + Preferences + About — everything that
-  // used to be a <details> block on this same screen moved into one of the
-  // 4 drill-in sub-screens below. Root still needs every one of these
-  // render calls (payment channels / LINE / team / shop / slip-verify / etc.)
-  // because their status feeds the root's status pills and Tools-grid badge
-  // even though their markup now lives on the sub-screen — see
-  // updatePaymentsPill()/updateLineTeamPill()/renderDataBackupStatus()
-  // called from inside those functions.
+  // hosts the account card + "Set up your business" drill-in rows (with
+  // live status pills) + Preferences + About — everything that used to be
+  // a <details> block on this same screen moved into one of the drill-in
+  // sub-screens below (TSK-020 added a 5th, Tools, moving the old Tools
+  // grid off root entirely). Root still needs every one of these render
+  // calls (payment channels / LINE / team / shop / slip-verify / etc.)
+  // because their status feeds the root's status pills even though their
+  // markup now lives on the sub-screen — see updatePaymentsPill()/
+  // updateLineTeamPill()/renderDataBackupStatus() called from inside those
+  // functions.
   if (name === 'more' && typeof renderWorkflowControls === 'function') renderWorkflowControls();
-  if (name === 'more') applyInsightsVisibility();
   if (name === 'more') renderBackupReminder();
   if (name === 'more') renderCloudBackupSection();
   if (name === 'more') renderSubscriptionSection();
@@ -7976,7 +7991,6 @@ function switchScreen(name) {
   if (name === 'more') renderShopSection();
   if (name === 'more') renderSlipVerifySection();
   if (name === 'more') renderPaymentChannels();
-  if (name === 'more') renderFollowupsTile();
   if (name === 'more') renderDataBackupStatus();
   if (name === 'more') renderThemeSeg();
   // Drill-in sub-screens: re-render their own sections fresh on every visit
@@ -7990,6 +8004,10 @@ function switchScreen(name) {
   if (name === 'more-line') renderLineChannelSection();
   if (name === 'more-line') renderTeamSection();
   if (name === 'more-data') renderDataBackupStatus();
+  // TSK-020: Tools relocated off More's root into its own drill-in — same
+  // idempotent re-render-on-every-visit treatment as the 4 above.
+  if (name === 'more-tools') applyInsightsVisibility();
+  if (name === 'more-tools') renderFollowupsTile();
   if (name === 'insights') renderInsights();
   // M2 modules (tax.js / invoices.js / docgen.js). Guarded so a not-yet-loaded
   // module can't crash navigation.

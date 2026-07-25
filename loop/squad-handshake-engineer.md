@@ -1,8 +1,8 @@
 <squad_metadata>
   <squad_name>Engineer-Squad</squad_name>
-  <current_status>EXECUTING</current_status>
-  <active_task_id>TSK-020</active_task_id>
-  <sprint_completion_percentage>90</sprint_completion_percentage>
+  <current_status>BLOCKED_ON_OWNER</current_status>
+  <active_task_id>TSK-023-money-fields</active_task_id>
+  <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
 ## Current Focus
@@ -26,15 +26,29 @@ see backlog-inbox.md's TSK-018 entry for the full writeup.
 The owner then said "complete every backlog" — explicit go-ahead to build
 TSK-020/021/023 on the squad's own recommendations rather than wait for a
 task-by-task confirmation. TSK-023 shipped first (commit a6db194, PR #78
-open): the Quick log/Full details toggle, "Items on this engagement", and
+merged): the Quick log/Full details toggle, "Items on this engagement", and
 "Time tracking" (+ Focus mode) are removed — Fee/Tip/Expense/Sessions stay
 untouched (still held, no revenue-model replacement given). One real
 discovery mid-build: the owner's original ask also named "Options compared"
 and "Plan & payments" for removal, but those now host TSK-018 part 2's Book
 viewing + milestone gating — flagged before touching either, owner
-confirmed keeping both. TSK-020 (Tools grid) and TSK-021 (persona
-onboarding) are next up. Also: the new `test` CI gate (deploy-vercel.yml,
-added this arc) had its first real production run and worked exactly as
+confirmed keeping both. TSK-020 shipped next (commit 08ac008, PR #79): the Tools grid is
+relocated (not deleted) off More's root into its own 5th drill-in,
+keeping Follow-ups/Portfolio/Research/Insights fully reachable. TSK-021
+shipped last (commit 504e177, PR #79): a fresh guest/account no longer
+sees the persona-onboarding modal at signup and no longer gets a preset
+Services catalog auto-seeded (`businessType` now defaults straight to
+`custom`, whose `seedServices` was already empty) — the picker survives
+only for the dedicated "Try a demo" flow, which still needs it to choose
+which persona-flavored demo dataset to seed. The persona concept itself
+(businessType/unit-word labeling/i18n variants/client trackers/the
+Settings-side switcher) is untouched, exactly as scoped to onboarding-only
+removal. That closes out every backlog item except the one the owner
+explicitly told the squad to hold: TSK-023's Fee/Tip/Expense/Sessions
+money fields, which need an answer on what replaces `job.netAmount` as
+the revenue computation before any building starts — see Cross-Squad
+Requests below. Also: the new `test` CI gate (deploy-vercel.yml, added
+this arc) had its first real production run and worked exactly as
 designed — see the correction below.
 
 **Correction to this file's own prior record**: the 2026-07-22 entry below
@@ -212,6 +226,36 @@ pass/fail count.
   seed-independent and unaffected); check-merges.js/check-options-lost.js
   needed only their `setJobModalMode('full')` setup calls dropped. Full
   battery clean: 15 Node + 33 Playwright suites, 0 failures.
+* PR #79 (commit 08ac008): **TSK-020** — the 4-tile Tools grid
+  (Follow-ups/Portfolio/Research/Insights) is gone from More's root,
+  relocated (not deleted, per the researcher_notes' option (b)) one level
+  deeper as a single "Tools" drill-in row into a new `#s-more-tools`
+  screen hosting the same 4 tiles unchanged — all 4 screens/modules stay
+  fully reachable, no orphaned code. `switchScreen()`'s render triggers for
+  the Follow-ups badge and Insights-tile visibility moved from `'more'` to
+  `'more-tools'`, matching the existing pattern for the other 4 drill-ins.
+  check-more-settings-v2.js updated with a `goTools()` helper and new
+  open/back-button coverage matching the other 4 sub-pages. Full battery
+  clean: 15 Node + 33 Playwright suites, 0 failures.
+* PR #79 (commit 504e177): **TSK-021** — built option (a) from
+  researcher_notes (onboarding-only removal), the smaller of the two scopes
+  the owner was given to choose between. `enterApp()` now auto-selects
+  `businessType='custom'` via the existing `choosePersonaOnboard('custom')`
+  instead of blocking boot on `#modal-persona-onboard`;
+  `BUSINESS_TYPES.custom.seedServices` was already `[]`, so a new account
+  starts with zero preset services with no seeding-logic change needed. The
+  picker survives only for `login.html?demo=1` ("Try a demo"), which still
+  needs it to pick a persona-flavored demo dataset. Traced persona-
+  dependence across all 33 Playwright suites before touching anything: only
+  5 had a real dependency on the picker, 4 of those already resolved
+  cleanly (3 via the demo path, 1 via direct IndexedDB seeding);
+  check-onboarding.js (tested the removed flow directly) and
+  check-onboarding2.js rewritten for the new default-to-custom behavior;
+  the other ~28 suites' now-dead picker-click setup step stripped by a
+  scripted mechanical pass. Full battery clean: 15 Node + 33 Playwright
+  suites, 0 failures. This was the last actionable backlog item — every
+  TSK is now shipped except the money-field half of TSK-023, held on
+  purpose pending an owner answer (see Cross-Squad Requests).
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
@@ -236,9 +280,15 @@ produced, caught by CI rather than a strike)
   (merged), `deploy-production` no longer fires on push at all — only on
   a chat-triggered `workflow_dispatch`, confirmed working end-to-end (see
   Resolved note above).
-* Owner: TSK-018 (loop/backlog-inbox.md) still needs an answer to its open
-  design question — does anything replace "+ Step with date" for freeform
-  mid-engagement reminders once/if job.subTasks is removed?
+* Owner: TSK-018's open design question ("does anything replace freeform
+  mid-engagement reminders?") was answered directly — "I don't actually use
+  it that way — just remove it" — and shipped in PR #77. No, nothing
+  replaces it; the owner confirmed that's fine.
+* Owner: the one remaining open question in the whole backlog — TSK-023's
+  Fee/Tip/Expense/Sessions money fields are still held (see PR #78's entry
+  above). Engineer-Squad will not touch `job.netAmount` or its readers
+  (Insights, tax rollup, package math, Home's earned/net stats) until the
+  owner says what should compute revenue instead.
 * Owner (lower priority, noted not urgent): TSK-002's rebuild dropped
   Manage's Invoices/Docs rows from More entirely — verified as a legitimate
   no-op (Home's quick-action row already reaches both, predates this task).

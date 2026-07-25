@@ -1,16 +1,21 @@
 /* Acceptance suite for TSK-002/007 (More/Settings rebuild): the old 12
- * <details> sections collapsed into an account card + Tools grid +
- * "Set up your business" drill-in rows (4 sub-pages) + Preferences + About.
+ * <details> sections collapsed into an account card + "Set up your
+ * business" drill-in rows (4 sub-pages) + Preferences + About. TSK-020
+ * later moved the Tools grid (Follow-ups/Portfolio/Research/Insights) off
+ * the root screen into its own 5th drill-in (#s-more-tools) per the owner
+ * — relocated, not deleted, since it was the only entry point to those 4
+ * screens/modules.
  * Harness pattern copied from tests/check-payments.js / check-team.js.
  *
  * Covers:
  *   1. Every relocated action from the research assessment's inventory is
  *      still reachable from the new structure.
- *   2. The 4 drill-in sub-pages open from their root row and their back
- *      button returns to root.
+ *   2. The 5 drill-in sub-pages (including Tools) open from their root row
+ *      and their back button returns to root.
  *   3. Status pills (Payments & shop / LINE & team / Data & backup) reflect
  *      REAL state, and update live when that state changes.
- *   4. The Follow-ups Tools-grid tile badge matches the real due count.
+ *   4. The Follow-ups tile badge (now inside the Tools drill-in) matches
+ *      the real due count.
  *
  * Run: NODE_PATH=/opt/node22/lib/node_modules node tests/check-more-settings-v2.js
  * Expects http://localhost:8923 serving ../app.
@@ -39,8 +44,6 @@ const errors = [];
   await page.fill('#auth-pass', 'pass1234');
   await page.fill('#auth-confirm', 'pass1234');
   await page.click('#auth-submit');
-  await page.waitForSelector('#modal-persona-onboard.open', { timeout: 20000 });
-  await page.click('#modal-persona-onboard .list-row:nth-child(1)');   // trainer
   await page.waitForTimeout(500);
   await page.evaluate(() => document.getElementById('cloud-backup-modal')?.remove());
   await page.evaluate(async () => { await onLangChange('en'); });
@@ -49,36 +52,47 @@ const errors = [];
   const active = (id) => page.evaluate(sel => document.getElementById(sel)?.classList.contains('active'), id);
   const goMore = async () => { await page.evaluate(() => switchScreen('more')); await page.waitForTimeout(200); };
 
-  // ═══ 1. Root screen: account card, Tools grid, "Set up your business",
-  //        Preferences, About all present with the right ids ═══════════════
+  // ═══ 1. Root screen: account card, "Set up your business", Preferences,
+  //        About, and the Tools drill-in row all present with the right ids
+  //        (TSK-020: Tools is a drill-in row now, not a root-level grid) ════
   await goMore();
   assert(await active('s-more'), '1: More root screen is active after switchScreen(\'more\')');
-  const rootIds = ['acct-avatar', 'acct-name', 'acct-sub', 'tool-tile-insights', 'pill-payments',
+  const rootIds = ['acct-avatar', 'acct-name', 'acct-sub', 'pill-payments',
     'pill-line-team', 'pill-data-backup', 'set-lang', 'set-currency', 'set-goal-month', 'seg-theme-light',
     'seg-theme-dark', 'seg-theme-auto', 'set-count', 'app-version'];
   for (const id of rootIds) {
     assert(await page.locator('#' + id).count() === 1, `1: #${id} present on the More root screen`);
   }
-  const insightsHiddenByDefault = await page.evaluate(() => document.getElementById('tool-tile-insights').hidden);
-  assert(insightsHiddenByDefault === true, '1: Insights tile stays hidden until unlocked (gating preserved, not silently dropped)');
+  assert(await page.locator('.biz-row:has-text("Follow-ups, portfolio")').count() === 1,
+    '1: Tools drill-in row present on the More root screen');
 
-  // ═══ 2. Tools grid: Follow-ups/Portfolio/Research tiles navigate ═══════
+  // ═══ 2. Tools drill-in: opens #s-more-tools, back button returns to root;
+  //        Follow-ups/Portfolio/Research tiles navigate ═══════════════════
+  const goTools = async () => { await goMore(); await page.click('.biz-row:has-text("Follow-ups, portfolio")'); await page.waitForTimeout(150); };
+  await goTools();
+  assert(await active('s-more-tools'), '2: Tools row opens #s-more-tools');
+  const insightsHiddenByDefault = await page.evaluate(() => document.getElementById('tool-tile-insights').hidden);
+  assert(insightsHiddenByDefault === true, '2: Insights tile stays hidden until unlocked (gating preserved, not silently dropped)');
   await page.click('.tool-tile:has-text("Follow-ups")');
   await page.waitForTimeout(150);
   assert(await active('s-followups'), '2: Follow-ups tile opens #s-followups');
-  await goMore();
+  await goTools();
   await page.click('.tool-tile:has-text("Portfolio")');
   await page.waitForTimeout(150);
   assert(await active('s-portfolio'), '2: Portfolio tile opens #s-portfolio');
-  await goMore();
+  await goTools();
   await page.click('.tool-tile:has-text("Research")');
   await page.waitForTimeout(150);
   assert(await active('s-research'), '2: Research tile opens #s-research');
-  await goMore();
+  await goTools();
+  await page.click('#s-more-tools button.avatar');
+  await page.waitForTimeout(150);
+  assert(await active('s-more'), '2: back button on Tools returns to #s-more');
 
   // ═══ 3. Insights: tap-version-7x unlock still works, tile then reachable ═
   for (let i = 0; i < 7; i++) { await page.click('#app-version'); }
   await page.waitForTimeout(200);
+  await goTools();
   const insightsVisibleAfterUnlock = await page.evaluate(() => !document.getElementById('tool-tile-insights').hidden);
   assert(insightsVisibleAfterUnlock, '3: tapping the version 7x unlocks the Insights tile');
   await page.click('#tool-tile-insights');
@@ -226,6 +240,10 @@ const errors = [];
   assert(dataPillToday.trim() === 'Today', '11: Data & backup pill reads "Today" right after a backup, got "' + dataPillToday + '"');
 
   // ═══ 12. Follow-ups tile badge matches the REAL due count ══════════════
+  // TSK-020: the badge only re-renders on visiting #s-more-tools now
+  // (renderFollowupsTile() moved off the 'more' root trigger), so explicitly
+  // navigate there before each check instead of relying on stale state.
+  await goTools();
   const badgeHiddenBefore = await page.evaluate(() => document.getElementById('tool-badge-followups').hidden);
   assert(badgeHiddenBefore === true, '12: Follow-ups badge starts hidden with nothing due, got hidden=' + badgeHiddenBefore);
 
@@ -241,7 +259,7 @@ const errors = [];
     });
     await reload();
   });
-  await goMore();
+  await goTools();
   await page.waitForTimeout(200);
   const dueCount = await page.evaluate(() => window.followupsDueCount());
   const badgeHiddenAfter = await page.evaluate(() => document.getElementById('tool-badge-followups').hidden);

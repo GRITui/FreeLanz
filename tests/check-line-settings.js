@@ -20,7 +20,6 @@ const { chromium } = require('playwright');
   await page.click('#auth-submit');
   await page.waitForURL('**/index.html', { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(400);
-  await page.click('#modal-persona-onboard .list-row:nth-child(1)');
   await page.waitForTimeout(400);
   // Dismiss the first-login "enable cloud backup?" modal if it appeared —
   // it'd otherwise sit on top of the page intercepting every later click.

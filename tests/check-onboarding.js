@@ -25,58 +25,56 @@ const { chromium } = require('playwright');
   const loginBtnText = await page.textContent('#tab-login');
   assert(loginBtnText && /[฀-๿]/.test(loginBtnText), 'login tab should render in Thai, got: ' + loginBtnText);
 
-  // 3. Continue as guest -> should land on index.html and show the persona onboarding modal
+  // 3. TSK-021: Continue as guest -> lands directly on Home, no persona
+  //    onboarding modal, no interruption to boot (owner: stop asking a new
+  //    account "what kind of business do you run?" at signup). The picker
+  //    (#modal-persona-onboard) survives only for the dedicated "Try a
+  //    demo" flow (login.html?demo=1) — see check-demo-data.js.
   await page.click('button.auth-btn.guest');
   await page.waitForURL('**/index.html', { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(500);
 
   const modalOpen = await page.evaluate(() => document.getElementById('modal-persona-onboard').classList.contains('open'));
-  assert(modalOpen, 'persona onboarding modal should be open on first run');
+  assert(!modalOpen, 'persona onboarding modal should NOT open for a plain guest/registered account');
 
   const homeActive = await page.evaluate(() => document.getElementById('s-home').classList.contains('active'));
-  assert(!homeActive, 'Home should NOT be active yet, onboarding should block boot');
+  assert(homeActive, 'Home should be active immediately — nothing blocks boot anymore');
 
-  // Onboarding modal shows 7 choices (trainer/realestate/laundry/insurance/garage/kol/custom)
-  const rowCount = await page.locator('#modal-persona-onboard .list-row').count();
-  assert(rowCount === 7, 'onboarding should show 7 persona choices, got: ' + rowCount);
-
-  // 4. Pick "garage" persona
-  await page.click('#modal-persona-onboard .list-row:has-text("อู่ซ่อมรถ")').catch(async () => {
-    // fallback to English label in case lang somehow reverted
-    await page.click('#modal-persona-onboard .list-row:nth-child(5)');
-  });
-  await page.waitForTimeout(500);
-
-  const modalClosed = await page.evaluate(() => !document.getElementById('modal-persona-onboard').classList.contains('open'));
-  assert(modalClosed, 'onboarding modal should close after choosing a persona');
-
-  const homeActive2 = await page.evaluate(() => document.getElementById('s-home').classList.contains('active'));
-  assert(homeActive2, 'Home should be active after choosing a persona');
-
-  const businessType = await page.evaluate(() => window.businessType ? window.businessType() : null);
-  // businessType() isn't on window explicitly; read via settings select instead
-  const btSelectVal = await page.inputValue('#set-business-type').catch(() => null);
-
-  // 5. Verify services were auto-seeded for garage persona (Oil change / Full service)
-  await page.click('.nav-btn:has-text("More"), .nav-btn').catch(() => {});
-  // Navigate to Settings/More screen to check business type select value, and Services screen for seeded services
+  // 4. businessType defaults to 'custom' automatically, with zero services
+  //    auto-seeded (BUSINESS_TYPES.custom.seedServices is empty) — the
+  //    owner's other ask, "stop auto-seeding a starter catalog".
   await page.evaluate(() => window.switchScreen && window.switchScreen('more'));
   await page.waitForTimeout(300);
   const btVal = await page.inputValue('#set-business-type');
-  assert(btVal === 'garage', 'Settings business-type select should reflect chosen persona (garage), got: ' + btVal);
+  assert(btVal === 'custom', 'Settings business-type select should default to custom with no picker, got: ' + btVal);
 
   await page.evaluate(() => window.switchScreen && window.switchScreen('services'));
   await page.waitForTimeout(300);
   const servicesText = await page.textContent('#services-body');
-  assert(servicesText && servicesText.includes('Oil change'), 'garage persona should auto-seed "Oil change" service, got: ' + (servicesText || '').slice(0, 200));
+  assert(!servicesText || !servicesText.includes('Oil change'), 'no starter services auto-seeded for the default custom persona, got: ' + (servicesText || '').slice(0, 200));
 
-  // 6. Reload -> onboarding should NOT show again (already set)
+  // 5. The persona concept itself survives — switching business type later
+  //    via Settings still re-seeds that type's starter catalog (TSK-021
+  //    kept this manual path per the owner's scope: onboarding-only removal).
+  //    #set-business-type lives on the "Business & documents" drill-in
+  //    (TSK-002/007), not the More root itself.
+  await page.evaluate(() => window.switchScreen && window.switchScreen('more-biz'));
+  await page.waitForTimeout(300);
+  await page.selectOption('#set-business-type', 'garage');
+  await page.evaluate(v => window.onBusinessTypeChange && window.onBusinessTypeChange(v), 'garage');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.switchScreen && window.switchScreen('services'));
+  await page.waitForTimeout(300);
+  const servicesTextAfter = await page.textContent('#services-body');
+  assert(servicesTextAfter && servicesTextAfter.includes('Oil change'), 'manually switching to garage in Settings still auto-seeds "Oil change", got: ' + (servicesTextAfter || '').slice(0, 200));
+
+  // 6. Reload -> no onboarding modal (businessType already set, same as before)
   await page.reload();
   await page.waitForTimeout(600);
   const modalOpenAfterReload = await page.evaluate(() => document.getElementById('modal-persona-onboard').classList.contains('open'));
-  assert(!modalOpenAfterReload, 'onboarding modal should not reappear after businessType is already set');
+  assert(!modalOpenAfterReload, 'onboarding modal should not appear after reload once persona/businessType is set');
   const homeActiveAfterReload = await page.evaluate(() => document.getElementById('s-home').classList.contains('active'));
-  assert(homeActiveAfterReload, 'Home should be active immediately on reload once persona is already chosen');
+  assert(homeActiveAfterReload, 'Home should be active immediately on reload');
 
   console.log(`\n${pass} passed, ${fail} failed`);
   console.log('Console/page errors:', errors.length ? errors : 'none');

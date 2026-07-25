@@ -24,7 +24,6 @@ const { chromium } = require('playwright');
   await page.click('#auth-submit');
   await page.waitForURL('**/index.html', { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(400);
-  await page.click('#modal-persona-onboard .list-row:nth-child(1)');
   await page.waitForTimeout(400);
 
   // Stub SidekickBackend so we can drive renderSubscriptionSection() without a real backend.

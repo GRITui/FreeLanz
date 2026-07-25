@@ -42,8 +42,6 @@ const assert = (cond, msg) => { if (cond) { pass++; } else { fail++; console.log
   await pageA.fill('#auth-pass', 'pass1234');
   await pageA.fill('#auth-confirm', 'pass1234');
   await pageA.click('#auth-submit');
-  await pageA.waitForSelector('#modal-persona-onboard.open', { timeout: 20000 });
-  await pageA.click('#modal-persona-onboard .list-row:nth-child(1)'); // trainer
   await pageA.waitForTimeout(500);
   await pageA.evaluate(() => document.getElementById('cloud-backup-modal')?.remove());
   await pageA.evaluate(async () => { await onLangChange('en'); });

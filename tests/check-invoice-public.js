@@ -187,8 +187,6 @@ async function newStubbedPage(browser, cfg) {
   await appPage.fill('#auth-pass', 'pass1234');
   await appPage.fill('#auth-confirm', 'pass1234');
   await appPage.click('#auth-submit');
-  await appPage.waitForSelector('#modal-persona-onboard.open', { timeout: 20000 });
-  await appPage.click('#modal-persona-onboard .list-row:nth-child(1)');
   await appPage.waitForTimeout(500);
   await appPage.evaluate(() => document.getElementById('cloud-backup-modal')?.remove());
   await appPage.evaluate(async () => { await onLangChange('en'); });

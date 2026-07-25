@@ -20,7 +20,6 @@ const { chromium } = require('playwright');
   await page.click('#auth-submit');
   await page.waitForURL('**/index.html', { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(400);
-  await page.click('#modal-persona-onboard .list-row:nth-child(1)');
   await page.waitForTimeout(400);
   await page.evaluate(() => { const m = document.getElementById('cloud-backup-modal'); if (m) m.remove(); });
 
