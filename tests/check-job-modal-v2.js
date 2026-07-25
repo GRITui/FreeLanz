@@ -184,7 +184,10 @@ const errors = [];
   }));
   assert(counts.options.includes('2'), '9: options drill row shows count 2, got ' + JSON.stringify(counts.options));
   assert(counts.items.includes('1'), '9: items drill row shows count 1, got ' + JSON.stringify(counts.items));
-  assert(counts.plan.includes('2') && counts.plan.includes('1'), '9: plan drill row shows 2 steps + 1 milestone, got ' + JSON.stringify(counts.plan));
+  // TSK-018 part 2: Plan & payments dropped its sub-task listing (job.subTasks
+  // now only backs Options compared's booked viewings, counted there instead)
+  // — this drill row's count is milestones-only.
+  assert(counts.plan.includes('1'), '9: plan drill row shows 1 milestone, got ' + JSON.stringify(counts.plan));
   assert(counts.time.includes('2:05'), '9: time tracking drill row shows total logged time 2:05 (125 min), got ' + JSON.stringify(counts.time));
 
   const openStates = ['job-options-details', 'job-items-details', 'job-plan-details', 'job-time-details'];

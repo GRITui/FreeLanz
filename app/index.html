@@ -619,20 +619,15 @@
         <div id="job-items-body"></div>
       </details>
 
-      <!-- M4-P3 Merge 1: dated steps (subTasks[]) and milestone payments
-           (milestones[]) folded into one "Plan & payments" section — UI-only,
-           the underlying data model/mechanics are untouched (see
-           renderSubTasks/renderMilestones in app.js). -->
+      <!-- TSK-018 part 2: the standalone "+ Step with date" freeform-reminder
+           UI (job.subTasks[]) is removed per the owner ("I don't actually
+           use it that way"). job.subTasks[] itself stays as a data field —
+           it's also the plumbing behind Options compared's 📅 "Book viewing"
+           button (bookViewingForOption() in app.js), which the owner asked
+           to keep working. Plan & payments is now milestones[] only. -->
       <details class="job-drill" id="job-plan-details">
         <summary class="section-title"><span><span data-i18n="plan_section_title">Plan &amp; payments</span><span class="job-drill-count" id="job-plan-count"></span></span></summary>
-        <div id="job-subtasks-body"></div>
-        <div class="form-row" style="margin-top:8px">
-          <input type="text" id="job-subtask-new" data-i18n-ph="subtask_add_ph" placeholder="Add a sub-task…" onkeydown="if(event.key==='Enter'){event.preventDefault();addSubTask(document.getElementById('j-edit-id').value);}" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card);color:var(--text);font-family:inherit;font-size:14px">
-          <button type="button" class="qc-btn" style="width:auto;padding:0 14px" onclick="addSubTask(document.getElementById('j-edit-id').value)" data-i18n="btn_add">+ Add</button>
-        </div>
-        <button type="button" class="btn-text" data-i18n="appt_add_dated" onclick="openApptModal({mode:'add', jobId: parseInt(document.getElementById('j-edit-id').value,10)})">+ Step with date</button>
-
-        <div id="job-milestones-body" style="margin-top:14px"></div>
+        <div id="job-milestones-body"></div>
         <button type="button" class="btn-submit" style="margin-top:8px" onclick="addMilestone(document.getElementById('j-edit-id').value)" data-i18n="add_milestone">+ Add milestone</button>
       </details>
 

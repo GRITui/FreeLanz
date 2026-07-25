@@ -119,51 +119,12 @@ const { chromium } = require('playwright');
   assert(rev.stage === 'booked', '3: TSK-014 — marking paid never moves the stage, stayed at ' + rev.stage);
   assert(!rev.gated, '3: TSK-014 — marking paid never gates (no stage move to gate after)');
 
-  // ═══ 4. Reschedule (✎) + delete cleanup ════════════════════════════════
-  const resched = await page.evaluate(async () => {
-    const uid = currentUser.id;
-    const jId = await dbPut('jobs', { uid, date: todayISO(), client: 'RS', clientId: null, serviceId: null,
-      serviceName: 'RS', amount: 100, tip: 0, expense: 0, count: 1, notes: '', netAmount: 100, cuid: cuid(),
-      stageOrder: getStageOrder().slice(), stage: 'inquiry', complete: false, invoiceId: null, quoteDocId: null,
-      packageId: null, subTasks: [], updatedAt: nowISO() });
-    await reload();
-    const j = jobs.find(x => x.id === jId);
-    const st = { id: cuid(), text: 'Site visit', done: false, dateType: 'exact', date: todayISO(),
-      startTime: '10:00', bookingCuid: null, stage: null, repeatOfId: null };
-    j.subTasks.push(st);
-    await createBookingForStep(j, st);
-    await dbPut('jobs', j);
-    await reload();
-    return { jId, stId: st.id, bookingCuid: st.bookingCuid };
-  });
-  await page.evaluate(({ jId, stId }) => { openEditJob(jId); }, resched);
-  await page.waitForTimeout(300);
-  const editBtn = await page.locator(`button[onclick*="editSubTask(${resched.jId}"]`).count();
-  assert(editBtn === 1, '4: ✎ edit button renders on the dated step');
-  await page.evaluate(({ jId, stId }) => editSubTask(jId, stId), resched);
-  await page.waitForSelector('#modal-appt', { timeout: 5000 });
-  const prefilledDate = await page.inputValue('#ap-date');
-  assert(prefilledDate.length === 10, '4: edit mode prefills the current date, got ' + prefilledDate);
-  const newDate = await page.evaluate(() => tlAddDays(todayISO(), 7));
-  await page.fill('#ap-date', newDate);
-  await page.fill('#ap-time', '14:30');
-  await page.click('#ap-save');
-  await page.waitForTimeout(400);
-  const afterEdit = await page.evaluate(async ({ jId, stId, bookingCuid }) => {
-    const j = jobs.find(x => x.id === jId);
-    const st = j.subTasks.find(s => s.id === stId);
-    const bk = (await dbAll('bookings')).find(b => b.cuid === bookingCuid);
-    return { stDate: st.date, stTime: st.startTime, bkDate: bk && bk.date, bkTime: bk && bk.startTime, subCount: j.subTasks.length };
-  }, resched);
-  assert(afterEdit.subCount === 1, '4: edit mutated in place — no duplicate step');
-  assert(afterEdit.stDate === newDate && afterEdit.stTime === '14:30', '4: step date/time updated');
-  assert(afterEdit.bkDate === newDate && afterEdit.bkTime === '14:30', '4: linked calendar booking moved in the same write');
-  await page.evaluate(({ jId, stId }) => deleteSubTask(jId, stId), resched);
-  await page.waitForTimeout(300);
-  const bkGone = await page.evaluate(async ({ bookingCuid }) =>
-    !(await dbAll('bookings')).some(b => b.cuid === bookingCuid), resched);
-  assert(bkGone, '4: deleting the step deletes its linked booking (no ghost appointments)');
-  await page.evaluate(() => closeJobModal());   // section 6 clicks need the page uncovered
+  // §4 (Reschedule ✎ + delete cleanup on a dated sub-task) removed — TSK-018
+  // part 2 retired the standalone dated-sub-task list (editSubTask/
+  // deleteSubTask/the ✎ button) per the owner ("I don't actually use it
+  // that way"). job.subTasks[] itself survives only as the plumbing behind
+  // Options compared's 📅 "Book viewing" button; that path is covered
+  // separately (see check-scheduling.js/check-options-lost.js).
 
   // ═══ 5. Stage-gate opt-out ═════════════════════════════════════════════
   // TSK-012: the gate itself moved from a full-screen #modal-appt sheet to

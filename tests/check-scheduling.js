@@ -67,45 +67,25 @@ const errors = [];
   const today = await page.evaluate(() => todayISO());
   const plus = d => page.evaluate(n => tlAddDays(todayISO(), n), d);
   const dPlus6 = await plus(6);
-  const dPlus10 = await plus(10);
 
-  // ═══ 1. Undated sub-task via #job-subtask-new + Enter ═══════════════════
+  // §1 (undated sub-task via the removed #job-subtask-new input) is gone —
+  // TSK-018 part 2 retired the whole freeform sub-task list per the owner
+  // ("I don't actually use it that way"); there's no successor for an
+  // undated freeform checklist item specifically (Options compared and the
+  // milestone gate creator are both always-dated).
+
+  // ═══ 2. A dated step still creates a real linked booking (mechanics
+  //         intact) — TSK-018 part 2 retired the standalone "+ Step with
+  //         date" button, but openApptModal()/saveApptModal() themselves
+  //         are unchanged (now reached via bookViewingForOption() /
+  //         Options compared, and the milestone form's inline gate
+  //         creator — see check-options-lost.js / check-merges.js for
+  //         those). Call the function directly rather than through a DOM
+  //         button that no longer exists; everything downstream (the
+  //         modal, #ap-*, #ap-save) is untouched. ═══════════════════════
   await page.evaluate(id => openEditJob(id), jobA);
   await page.waitForTimeout(300);
-  // TSK-008: Plan & payments now lives behind Full details + a collapsed
-  // drill row — switch mode and pop the row open before interacting with it.
-  // It stays open across re-renders (renderSubTasks/renderMilestones only
-  // replace their own inner containers, never the <details> itself).
-  await page.evaluate(() => { setJobModalMode('full'); document.getElementById('job-plan-details').open = true; });
-  await page.fill('#job-subtask-new', 'Undated task');
-  await page.press('#job-subtask-new', 'Enter');
-  await page.waitForTimeout(300);
-  const undatedRow = await page.evaluate(() => {
-    const rows = Array.from(document.querySelectorAll('#job-subtasks-body .list-row'));
-    const r = rows.find(x => x.textContent.includes('Undated task'));
-    if (!r) return null;
-    return { buttons: r.querySelectorAll('button').length, chip: !!r.querySelector('.st-chip'),
-      repeat: Array.from(r.querySelectorAll('button')).some(b => b.textContent.trim() === '↻'),
-      checkbox: !!r.querySelector('input[type=checkbox]') };
-  });
-  assert(undatedRow && undatedRow.checkbox && undatedRow.buttons === 1 && !undatedRow.chip && !undatedRow.repeat,
-    '1: undated row = checkbox + one ✕ button only (no chip, no ↻), got ' + JSON.stringify(undatedRow));
-  await page.evaluate(() => {
-    Array.from(document.querySelectorAll('#job-subtasks-body .list-row'))
-      .find(x => x.textContent.includes('Undated task')).click();
-  });
-  await page.waitForTimeout(200);
-  assert(await job(jobA, `j.subTasks.find(s => s.text === 'Undated task').done === true`), '1: toggle marks undated sub-task done');
-  await page.evaluate(() => {
-    const r = Array.from(document.querySelectorAll('#job-subtasks-body .list-row'))
-      .find(x => x.textContent.includes('Undated task'));
-    r.querySelector('button[aria-label="Delete sub-task"]').click();
-  });
-  await page.waitForTimeout(200);
-  assert(await job(jobA, `!j.subTasks.some(s => s.text === 'Undated task')`), '1: delete removes undated sub-task');
-
-  // ═══ 2. "+ Step with date" → exact step + linked booking ════════════════
-  await page.click('#job-tracking-section button[data-i18n="appt_add_dated"]');
+  await page.evaluate(id => openApptModal({ jobId: id }), jobA);
   await page.waitForSelector('#modal-appt', { timeout: 5000 });
   await page.fill('#ap-step', 'Health check-up');
   await page.fill('#ap-date', today);
@@ -116,15 +96,11 @@ const errors = [];
     const j = jobs.find(x => x.id === id);
     const st = (j.subTasks || []).find(s => s.text === 'Health check-up');
     const bk = st ? (await dbAll('bookings')).find(b => b.cuid === st.bookingCuid) : null;
-    const rows = Array.from(document.querySelectorAll('#job-subtasks-body .list-row'));
-    const row = rows.find(r => r.textContent.includes('Health check-up'));
-    return { st, chip: row ? (row.querySelector('.st-chip')?.textContent || '') : '',
-      bk: bk ? { jobCuid: bk.jobCuid, date: bk.date, startTime: bk.startTime, status: bk.status, id: bk.id, title: bk.title } : null,
+    return { st, bk: bk ? { jobCuid: bk.jobCuid, date: bk.date, startTime: bk.startTime, status: bk.status, id: bk.id, title: bk.title } : null,
       jobCuid: j.cuid };
   }, jobA);
   assert(exact.st && exact.st.dateType === 'exact' && exact.st.date === today && exact.st.startTime === '10:30',
     '2: sub-task saved as exact with date+time');
-  assert(exact.chip.includes('📅') && exact.chip.includes('10:30'), '2: row shows 📅 date+time chip, got: ' + exact.chip);
   assert(exact.bk && exact.bk.jobCuid === exact.jobCuid && exact.bk.status === 'scheduled'
     && exact.bk.date === today && exact.bk.startTime === '10:30',
     '2: booking row created with jobCuid + scheduled + matching date/time, got ' + JSON.stringify(exact.bk));
@@ -208,8 +184,8 @@ const errors = [];
   // bookings-store row via job.dueBookingCuid — restoring what the old
   // full-screen gate did, per the owner's Option B call after PR #65. It
   // still never touches job.subTasks — that mechanism stays reserved for
-  // job-detail's own "+ Step with date" flow (exercised in §1-3/§11 above,
-  // untouched by either rewrite). Full create/move/skip/cancel coverage
+  // openApptModal()/saveApptModal() (exercised in §2 above, untouched by
+  // either rewrite). Full create/move/skip/cancel coverage
   // for the linked booking lives in tests/check-gate-booking.js; this
   // assertion just guards that THIS gate (a basic stage-advance) is one of
   // the paths that creates one.
@@ -387,41 +363,10 @@ const errors = [];
     && !(await page.evaluate(() => !!document.querySelector('.gate-card'))),
     '10: terminal advance (last stage) completes without gating');
 
-  // ═══ 11. Repeat (↻) a dated step ════════════════════════════════════════
-  await page.evaluate(id => openEditJob(id), jobA);
-  await page.waitForTimeout(300);
-  const srcBefore = await job(jobA, `JSON.stringify(j.subTasks.find(s => s.text === 'Health check-up'))`);
-  const repeatBtn = await page.evaluate(() => {
-    const rows = Array.from(document.querySelectorAll('#job-subtasks-body .list-row'));
-    const r = rows.find(x => x.textContent.includes('Health check-up'));
-    const b = r && Array.from(r.querySelectorAll('button')).find(x => x.textContent.trim() === '↻');
-    if (b) { b.click(); return { found: true, aria: b.getAttribute('aria-label') }; }
-    return { found: false };
-  });
-  assert(repeatBtn.found && !!repeatBtn.aria, '11: dated row has ↻ with aria-label');
-  await page.waitForSelector('#modal-appt', { timeout: 5000 });
-  const prefill = await page.evaluate(() => ({
-    step: document.getElementById('ap-step').value,
-    date: document.getElementById('ap-date').value,
-    exactActive: document.getElementById('ap-type-exact').classList.contains('seg-active'),
-  }));
-  assert(prefill.step === 'Health check-up' && prefill.date === '' && prefill.exactActive,
-    '11: repeat modal prefills text + type with date empty, got ' + JSON.stringify(prefill));
-  await page.fill('#ap-date', dPlus10);
-  await page.click('#ap-save');
-  await page.waitForTimeout(500);
-  const rep = await page.evaluate(id => {
-    const j = jobs.find(x => x.id === id);
-    const src = j.subTasks.find(s => s.text === 'Health check-up' && !s.repeatOfId);
-    const clone = j.subTasks.find(s => s.repeatOfId);
-    return { srcNow: JSON.stringify(src),
-      clone: clone ? { text: clone.text, sameId: clone.id === src.id, repeatOfId: clone.repeatOfId, srcId: src.id, date: clone.date } : null };
-  }, jobA);
-  assert(rep.clone && rep.clone.text === 'Health check-up' && !rep.clone.sameId
-    && rep.clone.repeatOfId === rep.clone.srcId && rep.clone.date === dPlus10,
-    '11: clone has same text, new id, new date, repeatOfId = source id, got ' + JSON.stringify(rep.clone));
-  assert(rep.srcNow === srcBefore, '11: source step unchanged by repeat');
-  await page.evaluate(() => closeJobModal());
+  // §11 (Repeat ↻ a dated step) is gone — repeatSubTask()/its ↻ button lived
+  // only in the removed standalone list; TSK-018 part 2 didn't ask for a
+  // successor (the owner's scope was specifically Options compared's 📅
+  // "Book viewing" and milestone gating, neither of which repeats).
 
   // ═══ 12. Board/Timeline toggle + persistence ════════════════════════════
   await page.evaluate(() => switchScreen('pipeline'));
@@ -454,8 +399,12 @@ const errors = [];
     bodyScrollW: document.body.scrollWidth, bodyClientW: document.body.clientWidth,
     docScrollW: document.documentElement.scrollWidth, docClientW: document.documentElement.clientWidth,
   }));
+  // jobB's job.due (§6a's own dot) was cleared back to null by §7's Skip,
+  // so by this point jobA's single exact step (§2) is the only dot left —
+  // TSK-018 part 2 removing the §11 repeat clone (which used to supply a
+  // 2nd) is why this is 1, not 2.
   assert(tl.rows === 2, '13: two jobs with dated steps → two timeline rows, got ' + tl.rows);
-  assert(tl.dots === 2, '13: two exact steps render as dots, got ' + tl.dots);
+  assert(tl.dots === 1, '13: one exact step renders as a dot, got ' + tl.dots);
   assert(tl.bars === 1, '13: one by-step renders as a bar, got ' + tl.bars);
   assert(tl.today === 1, '13: full-height today rule present');
   assert(tl.bodyScrollW === tl.bodyClientW && tl.docScrollW === tl.docClientW,
@@ -471,7 +420,11 @@ const errors = [];
   assert(Math.abs(barGeom.rightPx - barGeom.expected) < 0.5,
     '13: by-bar right edge lands on the deadline column end, got ' + JSON.stringify(barGeom));
 
-  // ═══ 14. Overdue by-step → danger on chip + timeline ════════════════════
+  // ═══ 14. Overdue by-step → danger on the timeline ═══════════════════════
+  // TSK-018 part 2: the job-detail chip half of this section (subTaskDateChip()
+  // inside the removed #job-subtasks-body list) no longer renders anywhere —
+  // that chip only ever existed inside the retired standalone list. The
+  // timeline's own overdue-state rendering is a separate code path, untouched.
   await page.evaluate(async id => {
     const j = jobs.find(x => x.id === id);
     j.subTasks.push({ id: cuid(), text: 'Missed deadline', done: false, dateType: 'by',
@@ -484,16 +437,6 @@ const errors = [];
     lateMarks: document.querySelectorAll('.tl-flag.late, .tl-bar.late').length,
   }));
   assert(overdueTl.lateMarks === 1, '14: overdue by-step renders in danger state on the timeline, got ' + JSON.stringify(overdueTl));
-  const chipOverdue = await page.evaluate(id => {
-    openEditJob(id);
-    const rows = Array.from(document.querySelectorAll('#job-subtasks-body .list-row'));
-    const r = rows.find(x => x.textContent.includes('Missed deadline'));
-    const chip = r && r.querySelector('.st-chip.chip-overdue');
-    return chip ? chip.textContent : null;
-  }, jobA);
-  assert(!!chipOverdue && chipOverdue.includes('เลยกำหนด'),
-    '14: overdue chip has chip-overdue class + Thai Overdue prefix, got ' + JSON.stringify(chipOverdue));
-  await page.evaluate(() => closeJobModal());
 
   // ═══ 15. Completed jobs + undated steps excluded; empty → tl_empty ══════
   const exclusion = await page.evaluate(async () => {
@@ -561,7 +504,14 @@ const errors = [];
   await page.evaluate(async () => { await onLangChange('th'); renderPipeline(); });
   await page.waitForTimeout(300);
 
-  // ═══ 20. Legacy job records load, render, toggle, advance cleanly ═══════
+  // ═══ 20. Legacy job records load, open, advance cleanly ════════════════
+  // TSK-018 part 2: the render/toggle half of this section exercised the
+  // now-removed standalone sub-task list (a pre-existing undated legacy
+  // entry rendering with no chip/↻, and toggling done via a row click) —
+  // that whole mechanism is gone, no successor for undated freeform items.
+  // What's still real and worth guarding: opening and advancing a job
+  // carrying old-shape subTasks[] data (no dateType, from before dated
+  // steps existed) must not crash — the "no migration pass" compat rule.
   const legacyId = await page.evaluate(async () => {
     const j = { uid: currentUser.id, date: todayISO(), client: 'Gate Client', clientId: window.__cid,
       serviceId: null, serviceName: 'Legacy svc', jobType: '', amount: 100, tip: 0, expense: 0,
@@ -575,22 +525,10 @@ const errors = [];
   });
   await page.evaluate(id => openEditJob(id), legacyId);
   await page.waitForTimeout(300);
-  const legacyRow = await page.evaluate(() => {
-    const rows = Array.from(document.querySelectorAll('#job-subtasks-body .list-row'));
-    const r = rows.find(x => x.textContent.includes('Legacy sub'));
-    return r ? { chip: !!r.querySelector('.st-chip'), repeat: Array.from(r.querySelectorAll('button')).some(b => b.textContent.trim() === '↻') } : null;
-  });
-  assert(legacyRow && !legacyRow.chip && !legacyRow.repeat, '20: legacy undated row renders with no chip / no ↻');
-  await page.evaluate(() => {
-    Array.from(document.querySelectorAll('#job-subtasks-body .list-row'))
-      .find(x => x.textContent.includes('Legacy sub')).click();
-  });
-  await page.waitForTimeout(200);
-  assert(await job(legacyId, `j.subTasks[0].done === true`), '20: legacy sub-task toggles');
   await page.evaluate(() => closeJobModal());
   await page.evaluate(id => advanceJobStage(id), legacyId);
   await page.waitForSelector('.gate-card', { timeout: 5000 });
-  assert(await job(legacyId, '!!j.pendingGateStage'), '20: legacy job advances and gates without errors');
+  assert(await job(legacyId, '!!j.pendingGateStage'), '20: legacy job opens, advances, and gates without errors');
   await page.click('.gate-btn-secondary');
   await page.waitForTimeout(400);
 
