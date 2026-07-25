@@ -203,7 +203,7 @@ Fix: add a third attention kind (e.g. `depleted`) for a client whose most-recent
 <task_item>
   <id>TSK-020</id>
   <source>OWNER_POPUP</source>
-  <status>NEEDS_OWNER_REVIEW</status>
+  <status>READY_FOR_PM</status><!-- SHIPPED by Engineer-Squad 2026-07-25: commit 08ac008, PR #79 (open). Built option (b) from researcher_notes: the 4-tile grid is gone from More's root, relocated (not deleted) one level deeper as a single "Tools" drill-in row into a new #s-more-tools screen hosting the same 4 tiles unchanged -- all 4 screens/modules stay fully reachable, satisfies the owner's "complete every backlog" go-ahead using the squad's own recommendation. Full battery clean: 15 Node + 33 Playwright suites, 0 failures. See squad-handshake-engineer.md. -->
   <priority>MEDIUM</priority>
   <title>Remove the "Tools" grid section from the More screen</title>
   <description>Owner asked to remove the "เครื่องมือ" / "Tools" section (screenshot: the 3-card grid on More showing Follow-ups/ติดตามลูกค้า, Portfolio/ผลงาน, Research/คลังความรู้).

@@ -1,8 +1,8 @@
 <squad_metadata>
   <squad_name>Engineer-Squad</squad_name>
   <current_status>EXECUTING</current_status>
-  <active_task_id>TSK-020</active_task_id>
-  <sprint_completion_percentage>90</sprint_completion_percentage>
+  <active_task_id>TSK-021</active_task_id>
+  <sprint_completion_percentage>95</sprint_completion_percentage>
 </squad_metadata>
 
 ## Current Focus
@@ -26,16 +26,18 @@ see backlog-inbox.md's TSK-018 entry for the full writeup.
 The owner then said "complete every backlog" — explicit go-ahead to build
 TSK-020/021/023 on the squad's own recommendations rather than wait for a
 task-by-task confirmation. TSK-023 shipped first (commit a6db194, PR #78
-open): the Quick log/Full details toggle, "Items on this engagement", and
+merged): the Quick log/Full details toggle, "Items on this engagement", and
 "Time tracking" (+ Focus mode) are removed — Fee/Tip/Expense/Sessions stay
 untouched (still held, no revenue-model replacement given). One real
 discovery mid-build: the owner's original ask also named "Options compared"
 and "Plan & payments" for removal, but those now host TSK-018 part 2's Book
 viewing + milestone gating — flagged before touching either, owner
-confirmed keeping both. TSK-020 (Tools grid) and TSK-021 (persona
-onboarding) are next up. Also: the new `test` CI gate (deploy-vercel.yml,
-added this arc) had its first real production run and worked exactly as
-designed — see the correction below.
+confirmed keeping both. TSK-020 shipped next (commit 08ac008, PR #79 open):
+the Tools grid is relocated (not deleted) off More's root into its own
+5th drill-in, keeping Follow-ups/Portfolio/Research/Insights fully
+reachable. TSK-021 (persona onboarding) is next up. Also: the new `test`
+CI gate (deploy-vercel.yml, added this arc) had its first real production
+run and worked exactly as designed — see the correction below.
 
 **Correction to this file's own prior record**: the 2026-07-22 entry below
 called check-scheduling.js's occasional "64 passed, 1 failed" a pre-
@@ -212,6 +214,17 @@ pass/fail count.
   seed-independent and unaffected); check-merges.js/check-options-lost.js
   needed only their `setJobModalMode('full')` setup calls dropped. Full
   battery clean: 15 Node + 33 Playwright suites, 0 failures.
+* PR #79 (open, commit 08ac008): **TSK-020** — the 4-tile Tools grid
+  (Follow-ups/Portfolio/Research/Insights) is gone from More's root,
+  relocated (not deleted, per the researcher_notes' option (b)) one level
+  deeper as a single "Tools" drill-in row into a new `#s-more-tools`
+  screen hosting the same 4 tiles unchanged — all 4 screens/modules stay
+  fully reachable, no orphaned code. `switchScreen()`'s render triggers for
+  the Follow-ups badge and Insights-tile visibility moved from `'more'` to
+  `'more-tools'`, matching the existing pattern for the other 4 drill-ins.
+  check-more-settings-v2.js updated with a `goTools()` helper and new
+  open/back-button coverage matching the other 4 sub-pages. Full battery
+  clean: 15 Node + 33 Playwright suites, 0 failures.
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
