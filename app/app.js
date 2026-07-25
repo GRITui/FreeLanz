@@ -3965,7 +3965,10 @@ async function renderHomeToday() {
     nextBookingToday(),
   ]);
 
-  const kindRank = { overdue: 0, expiring: 1, almost: 2 };
+  // TSK-019: 'depleted' (a package already at zero) ranks ahead of 'almost'
+  // (still has a little runway left) — the client with nothing left needs
+  // the renewal conversation more urgently than one who's merely running low.
+  const kindRank = { overdue: 0, expiring: 1, depleted: 2, almost: 3 };
   const attention = attentionAll.slice().sort((a, b) => {
     const kr = kindRank[a.kind] - kindRank[b.kind];
     return kr !== 0 ? kr : (a.sortKey - b.sortKey);
@@ -6017,6 +6020,29 @@ async function computeClientsNeedingAttention() {
             reason: `Package almost done · ${remaining} ${packageUnitLabel()} left`,
             todaySub: `Package almost done · ${remaining} ${packageUnitLabel()} left`,
             sortKey: remaining, // fewest-remaining first
+            actionLabel: t('offer_renewal_action'),
+            action: () => offerRenewalForClient(c.id),
+          });
+        }
+      } else {
+        // TSK-019: activePackageFor() only ever returns a package with
+        // remaining > 0, so a package that jumps straight from N remaining
+        // to exactly 0 in one delivery (normal for a variable-quantity
+        // business — e.g. a 26-piece laundry drop-off exhausting a package
+        // that had 26 left, skipping past the <=2 "almost" window entirely)
+        // fell out of this whole function with no renewal nudge, ever. Only
+        // the client's single most-recent package is checked (an old,
+        // long-abandoned depleted package shouldn't resurface); a package
+        // that expired with balance forfeited is excluded here since that's
+        // a different situation with its own message on the client profile.
+        const mostRecent = clientPackages(c.id)[0];
+        if (mostRecent && !packageIsExpired(mostRecent) && packageUsed(mostRecent) > 0 && packageRemaining(mostRecent) === 0) {
+          items.push({
+            client: c,
+            kind: 'depleted',
+            reason: `Package complete · 0 ${packageUnitLabel()} left`,
+            todaySub: `Package complete · renew?`,
+            sortKey: 0,
             actionLabel: t('offer_renewal_action'),
             action: () => offerRenewalForClient(c.id),
           });
