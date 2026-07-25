@@ -198,6 +198,37 @@ function waitForServer(url, timeoutMs) {
   assert(almostText.includes('almost done'), '4: almost-done row sub-text present, got: ' + almostText);
   assert(await almostRow.locator('.list-pill-marigold').count() === 1, '4: almost-done row also uses the marigold pill');
 
+  // ═══ 4b. Package depleted (TSK-019) — a variable-quantity package that
+  //          jumps straight from N remaining to exactly 0 in one delivery
+  //          (e.g. a laundry piece-count package) still gets a renewal
+  //          nudge, unlike before this fix (activePackageFor() excluded it
+  //          entirely once remaining hit 0, so it silently got zero row). ══
+  const depletedClientId = await mkClient('Depleted Malee');
+  const depletedPkgId = await mkPackage(depletedClientId, { totalSessions: 50, expiresAt: null });
+  await mkJob('deliver', { clientId: depletedClientId, packageId: depletedPkgId, count: 24 }); // visit 1: 24 of 50
+  await mkJob('deliver', { clientId: depletedClientId, packageId: depletedPkgId, count: 26 }); // visit 2: 26 of 50 -> exactly 0 left
+  await goHome();
+  const depletedRow = rowFor('Depleted Malee');
+  assert(await depletedRow.count() === 1, '4b: package-depleted row renders once a package hits exactly 0 remaining, got count ' + await depletedRow.count());
+  const depletedText = await depletedRow.textContent();
+  assert(depletedText.includes('Package complete'), '4b: depleted row sub-text says the package is complete, got: ' + depletedText);
+  assert(await depletedRow.locator('.list-pill-marigold').count() === 1, '4b: depleted row also uses the marigold Renew pill');
+  // Priority: depleted (0 left) ranks ahead of merely "almost done" (2 left).
+  const rowOrderTexts = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('#today-body .list-row')).map(r => r.textContent));
+  const depletedIdx = rowOrderTexts.findIndex(t => t.includes('Depleted Malee'));
+  const almostIdx = rowOrderTexts.findIndex(t => t.includes('Almost Mek'));
+  assert(depletedIdx >= 0 && almostIdx >= 0 && depletedIdx < almostIdx,
+    '4b: a depleted package sorts ahead of a merely-almost-done one, got depletedIdx=' + depletedIdx + ' almostIdx=' + almostIdx);
+  // Tapping the row opens the renewal flow (offerRenewalForClient), same
+  // action every other renewal-family row already uses.
+  await depletedRow.click();
+  await page.waitForTimeout(300);
+  const pkgFormOpen = await page.evaluate(() => !!window.__pkgFormOpen);
+  assert(pkgFormOpen, '4b: tapping the depleted-package row opens the package-add form (offerRenewalForClient)');
+  await page.evaluate(() => { togglePackageForm(false); closeCustomerModal(); });
+  await goHome();
+
   // ═══ 5. Shop order requests waiting — backend aggregate count (was
   //         attn-card) ══════════════════════════════════════════════════════
   const ordersRowText = await page.evaluate(() => document.getElementById('today-body').textContent);
