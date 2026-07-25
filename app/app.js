@@ -1168,7 +1168,7 @@ const I18N = {
     // Pipeline Board/Timeline view toggle + timeline (Gantt) strings
     pl_view_board:'Board', pl_view_timeline:'Timeline',
     tl_today:'Today',
-    tl_empty:"No dated steps yet — add dates to a job's sub-tasks to see them here.",
+    tl_empty:"No dated steps yet — book a follow-up date or add a dated sub-task to see it here.",
     // M3 — follow-ups (CRM queue copy-to-clipboard + delete failure messaging)
     followup_copy_btn:'Copy message',
     followup_copied_toast:'Message copied to clipboard',
@@ -1670,7 +1670,7 @@ const I18N = {
     // Pipeline Board/Timeline view toggle + timeline (Gantt) strings
     pl_view_board:'บอร์ด', pl_view_timeline:'ไทม์ไลน์',
     tl_today:'วันนี้',
-    tl_empty:'ยังไม่มีขั้นตอนที่ระบุวันที่ — เพิ่มวันที่ให้ขั้นตอนย่อยของงาน แล้วจะแสดงที่นี่',
+    tl_empty:'ยังไม่มีขั้นตอนที่ระบุวันที่ — นัดวันติดตามผลหรือเพิ่มขั้นตอนย่อยที่มีวันที่ แล้วจะแสดงที่นี่',
     // M3 — follow-ups (CRM queue copy-to-clipboard + delete failure messaging)
     followup_copy_btn:'คัดลอกข้อความ',
     followup_copied_toast:'คัดลอกข้อความไปยังคลิปบอร์ดแล้ว',
@@ -4650,10 +4650,34 @@ function renderPipelineTimeline() {
   // Active (non-complete) jobs only, and only their dated steps — undated
   // legacy sub-tasks have no place on a calendar ruler. A job with zero
   // dated steps is omitted entirely rather than shown as an empty row.
+  //
+  // TSK-018 (part 1): dated steps now come from TWO independent sources,
+  // not just job.subTasks. Since TSK-011/012/013 the inline stage-gate
+  // writes job.due directly instead of ever touching subTasks (see the
+  // STAGE-GATE INLINE CARD comment) — most jobs' "next date" lives there
+  // now, so a job with only a job.due reminder used to be invisible here
+  // even though it has a real upcoming date. A job.due backed by a real
+  // linked booking (job.dueBookingCuid, TSK-016) renders exactly like an
+  // 'exact' dated sub-task (a dot); one with no linked booking renders
+  // like a 'by' deadline (the hatched runway bar) — same two visual marks
+  // this ruler already had, no new mark type. A job can carry both a
+  // job.due point AND real subTask points at once; both show, unmerged.
   const rows = [];
   jobs.forEach(j => {
     if (jobComplete(j)) return;
-    const pts = (j.subTasks || []).filter(st => st.dateType && st.date);
+    const subPts = (j.subTasks || []).filter(st => st.dateType && st.date);
+    const duePts = [];
+    if (j.due) {
+      const meta = STAGE_META[jobStage(j)] || {};
+      duePts.push({
+        dateType: j.dueBookingCuid ? 'exact' : 'by',
+        date: j.due,
+        startTime: null,
+        done: false,
+        text: (meta.label && t(meta.label)) || t('field_client'),
+      });
+    }
+    const pts = subPts.concat(duePts);
     if (!pts.length) return;
     // Sort key: the job's most urgent open date; all-done jobs fall back to
     // their earliest date so they sink naturally relative to live work.

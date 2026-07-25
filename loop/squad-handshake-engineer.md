@@ -6,11 +6,14 @@
 </squad_metadata>
 
 ## Current Focus
-TSK-019 shipped (commit 75fe3e2, PR #70 merged). TSK-018 remains
-NEEDS_OWNER_REVIEW (subtask-removal design question unresolved). No other
-READY_FOR_PM items in the backlog — squad goes IDLE. Also: the new `test`
-CI gate (deploy-vercel.yml, added this arc) had its first real production
-run and worked exactly as designed — see the correction below.
+TSK-018 part (1) shipped — renderPipelineTimeline() now also sources dated
+points from job.due (+ its linked booking), not just job.subTasks (PR
+pending, see below). TSK-018 part (2) — removing job.subTasks entirely —
+remains NEEDS_OWNER_REVIEW, unstarted, blocked on the owner's answer to the
+open design question (see Cross-Squad Requests). No other READY_FOR_PM
+items in the backlog — squad goes IDLE once this PR merges. Also: the new
+`test` CI gate (deploy-vercel.yml, added this arc) had its first real
+production run and worked exactly as designed — see the correction below.
 
 **Correction to this file's own prior record**: the 2026-07-22 entry below
 called check-scheduling.js's occasional "64 passed, 1 failed" a pre-
@@ -59,6 +62,28 @@ pass/fail count.
   console errors), seeds the exact 24-then-26 video scenario. Full battery
   re-confirmed clean before merge (check-scheduling.js 65/65, all else
   green).
+* PR pending (this push): **TSK-018 part (1)** — `renderPipelineTimeline()`
+  (app/app.js:4645) was omitting any job whose only upcoming date lives in
+  `job.due` (the case for most jobs since TSK-011/012/013 moved the
+  stage-gate's date off subTasks entirely) unless it also had a dated
+  `job.subTasks` entry. Now builds each row's points from BOTH sources: a
+  `job.due` backed by a real linked booking (`job.dueBookingCuid`, TSK-016)
+  renders as a dot (same visual as an 'exact' subtask step); one without a
+  linked booking renders as a bar (same as a 'by' step) — no new mark type,
+  a job can show points from both sources unmerged. `tl_empty` copy
+  (EN+TH) updated to mention booking a follow-up date, not just dated
+  sub-tasks. Verified check-scheduling.js's existing §12-16 Timeline
+  assertions are unaffected: traced every fixture job's `job.due` lifecycle
+  through the file and confirmed none is still set by the time §12-16 run
+  (jobB's is the only one ever set, at §6, and §7's Skip clears it back to
+  null before §12) — no assertion edits needed there. Added new §6a (mid-
+  flow, right after §6 sets jobB.due via the gate's "Book & move" and before
+  §7 clears it): switches to timeline view, confirms jobB's row shows
+  exactly one dot and zero bars from job.due alone (zero subTasks at that
+  point), switches back to board. Full local battery green (`npm ci` +
+  `bash tests/run-all.sh` against the pre-installed sandbox Chromium):
+  check-scheduling.js 66/66, all 33 Playwright suites + 15 Node harnesses
+  0 failures. TSK-018 part (2) untouched, still blocked on the owner.
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
