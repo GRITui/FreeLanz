@@ -8,16 +8,19 @@
 ## Current Focus
 TSK-018 part (1) shipped (commit cf3eb73, PR #72 merged) — renderPipelineTimeline()
 now also sources dated points from job.due (+ its linked booking), not just
-job.subTasks. TSK-018 part (2) — removing job.subTasks entirely — remains
-NEEDS_OWNER_REVIEW, unstarted, blocked on the owner's answer to the open
-design question (see Cross-Squad Requests). No other READY_FOR_PM items in
-the backlog. Latest work: the deploy pipeline itself changed on owner
-request — merge-to-main now auto-deploys to staging, production deploy is
-chat-approval-gated instead of a GitHub-click gate (see Recent Commits/PRs
-and Cross-Squad Requests — one manual owner step still needed to fully cut
-over). Squad goes IDLE once that PR merges and the owner removes the old
-required-reviewer rule. Also: the new `test` CI gate (deploy-vercel.yml,
-added this arc) had its first real production run and worked exactly as
+job.subTasks. The deploy pipeline restructure also shipped (PR #74 merged)
+— merge-to-main auto-deploys to staging, production is chat-approval-gated
+(one manual owner step still open — see Cross-Squad Requests). Backlog is
+now five items deep in NEEDS_OWNER_REVIEW, all blocked on the owner: TSK-018
+part (2) (remove job.subTasks), TSK-020 (remove the Tools grid — orphans 4
+screens as literally asked), TSK-021 (remove persona onboarding — persona is
+cross-cutting, not isolated), TSK-022 (nav-bar Service/Product shortcut —
+needs a mechanism choice), TSK-023 (strip the job modal to Date/Client/
+Service/Notes — the highest-risk one, guts the app's core revenue field
+unless the owner specifies a replacement). No READY_FOR_PM items — squad
+stays IDLE until at least one of these gets an owner answer. Also: the new
+`test` CI gate (deploy-vercel.yml, added this arc) had its first real
+production run and worked exactly as
 designed — see the correction below.
 
 **Correction to this file's own prior record**: the 2026-07-22 entry below
@@ -92,7 +95,7 @@ pass/fail count.
 * PR #73 (merged): logged TSK-018 part (1)'s real PR/commit numbers into
   this file and backlog-inbox.md (PR #72's own record still said "pending"
   — bookkeeping only, no app code).
-* PR pending (this push): **deploy pipeline restructure** — owner asked for
+* PR #74 (merged, commit 6a3b508): **deploy pipeline restructure** — owner asked for
   merge-to-main to auto-deploy to staging, with production deploy gated by
   chat approval instead of the GitHub-side required-reviewer click. New
   `deploy-staging` job (deploy-vercel.yml) runs on every push to main once
@@ -108,6 +111,37 @@ pass/fail count.
   no test-suite impact — workflow-file-only change). See the Cross-Squad
   Requests entry below for the one manual step this still needs from the
   owner (no tool can do it).
+* PR pending (this push): logged **TSK-020** (remove the More screen's
+  "Tools" grid) and **TSK-021** (remove the persona onboarding picker +
+  preset-service seeding) from an owner screenshot + two-line ask —
+  bookkeeping only, no app code. Both marked NEEDS_OWNER_REVIEW rather than
+  READY_FOR_PM: TSK-020's grid is the ONLY nav entry point to Follow-ups/
+  Portfolio/Research/Insights today (confirmed via full-repo grep — no other
+  `switchScreen()` call reaches them), so deleting it as literally asked
+  orphans four working modules rather than removing a feature; TSK-021's
+  "persona" is a cross-cutting concept (i18n variants, client trackers, demo
+  data, unit-word labeling) touched in 30 of ~33 Playwright suites' own
+  setup flow, not an isolated onboarding screen. Both need the owner to pick
+  a scope (see backlog-inbox.md's researcher_notes for each) before
+  Engineer-Squad estimates or starts either.
+* PR pending (this push, same as above): logged **TSK-022** (add a
+  Service/Product shortcut to the bottom nav — currently 2 taps deep at
+  More ▸ Business & documents ▸ Services) and **TSK-023** (strip the
+  Add-session job modal down to Date/Client/Service/Notes) from a second
+  owner screenshot + list. TSK-023 is the highest-risk item logged this
+  cycle: it bundles two very different asks — dropping the Quick log/Full
+  details toggle + the 4 drill-in sections (Options compared/Items/Plan &
+  payments/Time tracking, each a self-contained feature like TSK-020) is
+  one thing, but removing Fee/Tip/Expense/Sessions guts `job.netAmount`
+  (`amount + tip - expense`, app.js:4370/2089/4423) — the single revenue
+  figure Insights, tax rollup, package math, and Home's earned/net stats
+  all read. Do NOT start building the money-field removal until the owner
+  says what should compute revenue instead (e.g. moving it onto
+  invoices/quotes) — picking wrong there means redoing real work, not just
+  UI. TSK-022 is much smaller but still needs a mechanism choice (6th nav
+  tab vs. replace an existing one vs. extend the FAB into a quick-add
+  menu) — see backlog-inbox.md's researcher_notes for both.
+  Engineer-Squad estimates or starts either.
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
