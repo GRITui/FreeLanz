@@ -6,14 +6,14 @@
 </squad_metadata>
 
 ## Current Focus
-TSK-018 part (1) shipped — renderPipelineTimeline() now also sources dated
-points from job.due (+ its linked booking), not just job.subTasks (PR
-pending, see below). TSK-018 part (2) — removing job.subTasks entirely —
-remains NEEDS_OWNER_REVIEW, unstarted, blocked on the owner's answer to the
-open design question (see Cross-Squad Requests). No other READY_FOR_PM
-items in the backlog — squad goes IDLE once this PR merges. Also: the new
-`test` CI gate (deploy-vercel.yml, added this arc) had its first real
-production run and worked exactly as designed — see the correction below.
+TSK-018 part (1) shipped (commit cf3eb73, PR #72 merged) — renderPipelineTimeline()
+now also sources dated points from job.due (+ its linked booking), not just
+job.subTasks. TSK-018 part (2) — removing job.subTasks entirely — remains
+NEEDS_OWNER_REVIEW, unstarted, blocked on the owner's answer to the open
+design question (see Cross-Squad Requests). No other READY_FOR_PM items in
+the backlog — squad goes IDLE. Also: the new `test` CI gate (deploy-vercel.yml,
+added this arc) had its first real production run and worked exactly as
+designed — see the correction below.
 
 **Correction to this file's own prior record**: the 2026-07-22 entry below
 called check-scheduling.js's occasional "64 passed, 1 failed" a pre-
@@ -62,7 +62,7 @@ pass/fail count.
   console errors), seeds the exact 24-then-26 video scenario. Full battery
   re-confirmed clean before merge (check-scheduling.js 65/65, all else
   green).
-* PR pending (this push): **TSK-018 part (1)** — `renderPipelineTimeline()`
+* PR #72 (merged, commit cf3eb73): **TSK-018 part (1)** — `renderPipelineTimeline()`
   (app/app.js:4645) was omitting any job whose only upcoming date lives in
   `job.due` (the case for most jobs since TSK-011/012/013 moved the
   stage-gate's date off subTasks entirely) unless it also had a dated
