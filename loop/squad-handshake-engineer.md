@@ -1,16 +1,16 @@
 <squad_metadata>
   <squad_name>Engineer-Squad</squad_name>
-  <current_status>EXECUTING</current_status>
-  <active_task_id>TSK-019</active_task_id>
-  <sprint_completion_percentage>90</sprint_completion_percentage>
+  <current_status>IDLE</current_status>
+  <active_task_id>none</active_task_id>
+  <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
 ## Current Focus
-TSK-019 built and pushed (commit 75fe3e2), PR pending. TSK-018 remains
+TSK-019 shipped (commit 75fe3e2, PR #70 merged). TSK-018 remains
 NEEDS_OWNER_REVIEW (subtask-removal design question unresolved). No other
-READY_FOR_PM items in the backlog. Also: the new `test` CI gate (deploy-
-vercel.yml, added this arc) had its first real production run and worked
-exactly as designed — see the correction below.
+READY_FOR_PM items in the backlog — squad goes IDLE. Also: the new `test`
+CI gate (deploy-vercel.yml, added this arc) had its first real production
+run and worked exactly as designed — see the correction below.
 
 **Correction to this file's own prior record**: the 2026-07-22 entry below
 called check-scheduling.js's occasional "64 passed, 1 failed" a pre-
@@ -45,7 +45,7 @@ pass/fail count.
   — see correction above. The first real thing the new CI gate caught.
 * PR #69 (merged): logged TSK-018 (Timeline/subtask rework, NEEDS_OWNER_REVIEW
   — bookkeeping only, no app code).
-* PR pending (commit 75fe3e2): **TSK-019** — `computeClientsNeedingAttention()`
+* PR #70 (merged, commit 75fe3e2): **TSK-019** — `computeClientsNeedingAttention()`
   only ever considered `activePackageFor()` (hard-filtered to `remaining >
   0`), so a package that jumps straight from N remaining to exactly 0 in
   one delivery (normal for a variable-quantity business — e.g. a laundry
@@ -56,7 +56,9 @@ pass/fail count.
   `almost` in Home's sort priority, reusing the existing marigold-pill row
   rendering and `offerRenewalForClient()` action — no new UI. New suite
   section: check-home-today-v2.js §4b, 5 assertions (48/48 total, 0
-  console errors), seeds the exact 24-then-26 video scenario.
+  console errors), seeds the exact 24-then-26 video scenario. Full battery
+  re-confirmed clean before merge (check-scheduling.js 65/65, all else
+  green).
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
@@ -66,8 +68,11 @@ produced, caught by CI rather than a strike)
 ## Cross-Squad Requests
 * Owner: PR #67's new production deploy pipeline needs the `production`
   environment's required-reviewer approval clicked (Actions tab → the
-  latest deploy-vercel.yml run → "Review deployments") — it's queued,
-  waiting, as of this entry.
+  latest deploy-vercel.yml run → "Review deployments"). Each new push to
+  main queues its own approval request; an older still-queued one
+  typically gets superseded (concurrency group `cancel-in-progress`) once
+  a newer push's `test` job passes — approve whichever run is current once
+  its `test` job finishes, not an older one still sitting queued.
 * Owner: TSK-018 (loop/backlog-inbox.md) still needs an answer to its open
   design question — does anything replace "+ Step with date" for freeform
   mid-engagement reminders once/if job.subTasks is removed?

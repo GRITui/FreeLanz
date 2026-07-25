@@ -188,7 +188,7 @@ Ask (2) -- removing the subtask feature outright -- is a real capability removal
 <task_item>
   <id>TSK-019</id>
   <source>RESEARCHER_SQUAD</source>
-  <status>READY_FOR_PM</status>
+  <status>READY_FOR_PM</status><!-- SHIPPED by Engineer-Squad 2026-07-25: commit 75fe3e2, PR #70 (merged). New suite section check-home-today-v2.js §4b, 48/48 total, 0 console errors. Full battery clean (check-scheduling.js 65/65, all else green). See squad-handshake-engineer.md. -->
   <priority>HIGH</priority>
   <title>Home never nudges renewal for a package that hits exactly 0 remaining in one visit</title>
   <description>Found while assessing the owner's real laundry-package use case (50-piece package, sold as variable per-visit quantities rather than fixed 1-unit sessions -- see the walkthrough video): a package that jumps straight from N remaining to 0 remaining in a single delivery (e.g. 26 left -> a 26-piece visit exhausts it) gets ZERO Home renewal nudge, ever.
