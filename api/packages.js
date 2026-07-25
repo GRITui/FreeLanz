@@ -7,7 +7,9 @@
 import { createResourceHandler } from '../lib/crudHandler.js';
 
 // 2026-07-16: client_cuid is client_id's ref cuid — see sql/schema-core.sql.
-const FIELDS = ['client_id', 'total_sessions', 'price', 'purchased_date', 'expires_at', 'notes', 'client_cuid'];
+// TSK-024: service_id/service_cuid follow the same ref-cuid pattern, for the
+// catalog service (if any) this package was purchased against.
+const FIELDS = ['client_id', 'total_sessions', 'price', 'purchased_date', 'expires_at', 'notes', 'client_cuid', 'service_id', 'service_cuid'];
 
 export default createResourceHandler('packages', FIELDS);
 export const config = { runtime: 'edge' };

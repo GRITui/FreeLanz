@@ -495,14 +495,22 @@
     purchased_date: p.purchasedDate, expires_at: p.expiresAt, notes: p.notes,
     // 2026-07-16: ref cuid for client_id — see refCuid()'s comment.
     client_cuid: await refCuid('clients', p.clientId),
+    // TSK-024: same ref-cuid pattern for the catalog service this package
+    // was purchased against (package-type service booked in Task flow, or
+    // manually linked via the client's "+Add package" form) — null for
+    // older/unlinked packages, same as client_cuid can be.
+    service_id: p.serviceId != null ? p.serviceId : null,
+    service_cuid: await refCuid('services', p.serviceId),
   }));
-  // `__clientCuid` is a transient field (see fromJobRow's comment) carrying
-  // client_cuid through for importDataset().
+  // `__clientCuid`/`__serviceCuid` are transient fields (see fromJobRow's
+  // comment) carrying client_cuid/service_cuid through for importDataset().
   function fromPackageRow(row) {
     return {
       cuid: row.cuid, clientId: num(row.client_id), totalSessions: num(row.total_sessions), price: num(row.price),
       purchasedDate: row.purchased_date, expiresAt: row.expires_at, notes: row.notes,
+      serviceId: row.service_id != null ? num(row.service_id) : null,
       __clientCuid: row.client_cuid || null,
+      __serviceCuid: row.service_cuid || null,
     };
   }
 

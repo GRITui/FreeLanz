@@ -635,8 +635,16 @@ function packageRemainingIgnoringExpiry(pkg) {
 }
 // The package a new session should offer to apply to: the client's most
 // recently purchased package that still has sessions left, or null.
-function activePackageFor(clientId) {
-  const mine = packages.filter(p => p.clientId === clientId)
+// `serviceId` (optional) scopes the match to packages bought against that
+// specific catalog service — a client can hold separate, independently-
+// tracked packages for different services (e.g. "1-on-1 training" 9/10 and
+// "Nutrition consult" 3/5 at once), and applying a job to the wrong one
+// would silently deduct from an unrelated service's balance. Callers that
+// only ever care about "does this client have any active package at all"
+// (the Clients list badge, Home's expiry/almost-done nudges, the standalone
+// package fast-path) omit serviceId and keep the old any-package behavior.
+function activePackageFor(clientId, serviceId) {
+  const mine = packages.filter(p => p.clientId === clientId && (serviceId == null || p.serviceId === serviceId))
     .sort((a, b) => (b.purchasedDate || '').localeCompare(a.purchasedDate || '') || (b.id || 0) - (a.id || 0));
   return mine.find(p => packageRemaining(p) > 0) || null;
 }
@@ -852,6 +860,8 @@ const I18N = {
     package_unit_label:'Package unit', package_unit_ph:'Sessions',
     package_unit_sub:'What one unit of a package is called — "Pieces," "Sessions," "Policies," whatever fits.',
     apply_to_package:'Apply to package', of_label:'of', left_label:'left', purchased_label:'Purchased',
+    apply_to_package_new:'Apply to package (new · {n} {unit})',
+    pkg_service_label:'Link to service (optional)', pkg_service_none:'No linked service',
     field_price:'Price', save_package:'Save package', renew_package:'+ Renew package', new_package:'+ New package',
     no_units_left:'No {unit} left on the last package.', no_package_yet:'No package yet.',
     enter_package_total:'Enter how many {unit} this package includes', package_saved:'Package saved',
@@ -1366,6 +1376,8 @@ const I18N = {
     package_unit_label:'หน่วยแพ็กเกจ', package_unit_ph:'เซสชัน',
     package_unit_sub:'หน่วยของแพ็กเกจเรียกว่าอะไร — "ชิ้น" "เซสชัน" "กรมธรรม์" หรือคำที่เหมาะกับธุรกิจของคุณ',
     apply_to_package:'ใช้กับแพ็กเกจ', of_label:'จาก', left_label:'เหลือ', purchased_label:'ซื้อเมื่อ',
+    apply_to_package_new:'ใช้กับแพ็กเกจ (เริ่มใหม่ · {n} {unit})',
+    pkg_service_label:'ผูกกับบริการ (ไม่บังคับ)', pkg_service_none:'ไม่ผูกกับบริการ',
     field_price:'ราคา', save_package:'บันทึกแพ็กเกจ', renew_package:'+ ต่ออายุแพ็กเกจ', new_package:'+ แพ็กเกจใหม่',
     no_units_left:'ไม่มี{unit}เหลือในแพ็กเกจล่าสุด', no_package_yet:'ยังไม่มีแพ็กเกจ',
     enter_package_total:'ระบุจำนวน{unit}ที่รวมอยู่ในแพ็กเกจนี้', package_saved:'บันทึกแพ็กเกจแล้ว',
@@ -4132,35 +4144,59 @@ function onJobCustomerChange(v) {
     openAddCustomer();
     return;
   }
-  refreshJobPackageRow(v, null);
+  refreshJobPackageRow(null);
 }
-// Shows/hides the job form's "Apply to package" row depending on whether the
-// selected client has a session package with sessions left. `existingPackageId`
+// Shows/hides the job form's "Apply to package" row, scoped to the
+// currently-selected client AND service — a client can hold separate
+// packages for different services (see activePackageFor()'s own doc
+// comment), so this must never offer/apply a package bought for a
+// different service than the one actually being booked. `existingPackageId`
 // (a job's own stored packageId, on edit) takes precedence over whatever's
-// currently active, so editing a session already linked to a now-exhausted
-// package still shows that same package rather than silently switching it.
-function refreshJobPackageRow(clientId, existingPackageId) {
+// currently active for that pair, so editing a session already linked to a
+// now-exhausted package still shows that same package rather than silently
+// switching it. If the selected service is itself a package-type catalog
+// item (usageQty > 1, TSK-024) but this client has no active package for it
+// yet, the row still shows — checked by default — offering to start one:
+// saveJob() creates it from the service's own usageQty/rate at save time,
+// so selling a package is just "create the service once, then book it."
+function refreshJobPackageRow(existingPackageId) {
   const row = document.getElementById('j-package-row');
   const checkbox = document.getElementById('j-apply-package');
   const label = document.getElementById('j-package-label');
   const hidden = document.getElementById('j-package-id');
   if (!row || !checkbox || !label || !hidden) return;
-  const cid = clientId ? parseInt(clientId) : null;
+  const cidVal = document.getElementById('j-customer').value;
+  const svcVal = document.getElementById('j-service').value;
+  const cid = (cidVal && cidVal !== '__new__') ? parseInt(cidVal) : null;
+  const serviceId = (svcVal && svcVal !== '__new__') ? parseInt(svcVal) : null;
+  const svc = serviceId != null ? services.find(s => s.id === serviceId) : null;
   let pkg = null;
-  if (cid != null) {
-    if (existingPackageId != null) pkg = packages.find(p => p.id === existingPackageId) || null;
-    if (!pkg) pkg = activePackageFor(cid);
+  if (cid != null && serviceId != null) {
+    if (existingPackageId != null) {
+      const existing = packages.find(p => p.id === existingPackageId);
+      if (existing && existing.clientId === cid && existing.serviceId === serviceId) pkg = existing;
+    }
+    if (!pkg) pkg = activePackageFor(cid, serviceId);
   }
-  if (!pkg) {
+  const isPackageService = !!(svc && !svcIsProduct(svc) && Number(svc.usageQty) > 1);
+  if (!pkg && !isPackageService) {
     row.style.display = 'none';
     hidden.value = '';
     checkbox.checked = false;
     return;
   }
   row.style.display = 'flex';
-  hidden.value = pkg.id;
-  label.textContent = `${t('apply_to_package')} (${packageRemaining(pkg)} ${t('of_label')} ${pkg.totalSessions} ${t('left_label')})`;
-  checkbox.checked = existingPackageId != null ? existingPackageId === pkg.id : true;
+  if (pkg) {
+    hidden.value = pkg.id;
+    label.textContent = `${t('apply_to_package')} (${packageRemaining(pkg)} ${t('of_label')} ${pkg.totalSessions} ${t('left_label')})`;
+    checkbox.checked = existingPackageId != null ? existingPackageId === pkg.id : true;
+  } else {
+    // No package exists yet for this exact (client, service) pair — offer to
+    // start one; saveJob() does the actual creation once this is confirmed.
+    hidden.value = '';
+    label.textContent = t('apply_to_package_new').replace('{n}', svc.usageQty).replace('{unit}', packageUnitLabel());
+    checkbox.checked = true;
+  }
   const countLabel = document.getElementById('j-count-label');
   if (countLabel) countLabel.textContent = packageUnitLabel();
   refreshPackageFastPathButton(cid);
@@ -4170,7 +4206,12 @@ function refreshJobPackageRow(clientId, existingPackageId) {
 // service/fee that isn't relevant (it was paid for up front). Add-mode
 // only: editing an existing job already has its own path into Delivery via
 // Task flow's confirm card, and jumping an in-flight job's stage here too
-// would let two different mechanisms disagree about where it is.
+// would let two different mechanisms disagree about where it is. Kept
+// deliberately unscoped by service (activePackageFor(cid), no serviceId) —
+// it fires the moment a client is picked, before any service is chosen, and
+// exists for the common single-active-package case; a client juggling
+// multiple concurrent service packages should use the full form instead so
+// the right one gets picked explicitly via j-service.
 function refreshPackageFastPathButton(cid) {
   const wrap = document.getElementById('j-package-fastpath');
   if (!wrap) return;
@@ -4286,6 +4327,7 @@ function onJobServiceChange(v) {
   if (!v) return;
   const s = services.find(x => x.id === parseInt(v));
   if (s) { document.getElementById('j-amount').value = s.rate; calcNet(); }
+  refreshJobPackageRow(null);
 }
 // TSK-023: the Quick log/Full details toggle (TSK-008) is removed per the
 // owner — every field/section is always shown now. j-package-row keeps its
@@ -4304,7 +4346,7 @@ function openAddJob(dateISO) {
   // has nothing to show yet.
   const tracking = document.getElementById('job-tracking-section');
   if (tracking) tracking.style.display = 'none';
-  refreshJobPackageRow(null, null);
+  refreshJobPackageRow(null);
   document.getElementById('j-delete').style.display = 'none';
   clearFieldErrors();
   calcNet();
@@ -4323,7 +4365,7 @@ function openEditJob(id) {
   populateJobSelects(j.clientId != null ? j.clientId : '', j.serviceId != null ? j.serviceId : '');
   const tracking = document.getElementById('job-tracking-section');
   if (tracking) tracking.style.display = 'block';
-  refreshJobPackageRow(j.clientId, j.packageId != null ? j.packageId : null);
+  refreshJobPackageRow(j.packageId != null ? j.packageId : null);
   document.getElementById('j-delete').style.display = 'block';
   window.__milestoneFormOpen = false;
   renderJobTracking(id);
@@ -4446,7 +4488,27 @@ async function saveJob() {
   }
   const applyPkgEl = document.getElementById('j-apply-package');
   const pkgIdEl = document.getElementById('j-package-id');
-  obj.packageId = (applyPkgEl && applyPkgEl.checked && pkgIdEl && pkgIdEl.value) ? parseInt(pkgIdEl.value) : null;
+  obj.packageId = null;
+  if (applyPkgEl && applyPkgEl.checked) {
+    if (pkgIdEl && pkgIdEl.value) {
+      obj.packageId = parseInt(pkgIdEl.value);
+    } else if (svc && !svcIsProduct(svc) && Number(svc.usageQty) > 1) {
+      // TSK-024: refreshJobPackageRow() found no active package yet for this
+      // (client, service) pair and offered to start one instead — create it
+      // now from the service's own usageQty/rate. Selling a package this way
+      // needs zero manual "+Add package" step beyond creating the Service
+      // once; the client's detail page still shows the resulting package
+      // (tagged with this service's name) for renewals/expiry edits later.
+      const newPkg = { uid, clientId, serviceId, totalSessions: svc.usageQty, price: svc.rate,
+        purchasedDate: date, expiresAt: null, notes: '', cuid: cuid(), updatedAt: nowISO() };
+      const pkgKey = await dbAdd('packages', newPkg);
+      newPkg.id = pkgKey;
+      if (!isGuest && typeof SidekickBackend !== 'undefined' && SidekickBackend.isEnabled()) {
+        SidekickBackend.mirrorPackageSave(newPkg).catch(() => {});
+      }
+      obj.packageId = newPkg.id;
+    }
+  }
   obj.updatedAt = nowISO();
   const isNew = !editId;
   const key = await dbPut('jobs', obj);
@@ -6173,7 +6235,7 @@ async function renderCustomers() {
       const sub = (idBits ? idBits + ' · ' : '') + htmlEsc(prospect) + ` <span class="stage-pill ${pillMeta.cls}">${htmlEsc(t(pillMeta.label))}</span>`;
       const pkg = activePackageFor(c.id);
       const pkgBadge = pkg
-        ? `<span class="pkg-badge">${packageRemaining(pkg)}/${htmlEsc(pkg.totalSessions)} left</span>` : '';
+        ? `<span class="pkg-badge">${pkg.serviceId != null ? htmlEsc(packageDisplayName(pkg)) + ' · ' : ''}${packageRemaining(pkg)}/${htmlEsc(pkg.totalSessions)} left</span>` : '';
       return `<div class="list-row" onclick="openEditCustomer(${c.id})">
         <div class="list-icon">👤</div>
         <div class="list-main">
@@ -6200,47 +6262,60 @@ function renderIntakeFields(c) {
 
 // ─── SESSION PACKAGES — shown within the Customer modal (edit mode only) ──
 window.__pkgFormOpen = false;
+// A package's own name for display: the linked service's name when it has
+// one (TSK-024 — packages created from booking a package-type service in
+// Task flow, or manually linked via the "+Add package" form's service
+// picker, carry serviceId), falling back to the generic unit label for
+// older/unlinked packages so nothing regresses for existing data.
+function packageDisplayName(pkg) {
+  const svc = pkg && pkg.serviceId != null ? services.find(s => s.id === pkg.serviceId) : null;
+  return svc ? svc.name : packageUnitLabel();
+}
 function renderCustomerPackages(clientId) {
   const wrap = document.getElementById('cust-package-body');
   if (!wrap) return;
   const list = clientPackages(clientId);
-  const active = activePackageFor(clientId);
   const unit = packageUnitLabel();
   let html = '';
-  if (active) {
-    const remaining = packageRemaining(active);
-    const pct = active.totalSessions > 0 ? Math.round((remaining / active.totalSessions) * 100) : 0;
-    const expiryLine = active.expiresAt ? `<div class="pkg-status-date">${htmlEsc(t('expires_label'))} ${htmlEsc(fmtDate(active.expiresAt))}</div>` : '';
-    html += `<div class="pkg-status">
-        <div class="pkg-status-row"><span>${remaining} ${htmlEsc(t('of_label'))} ${htmlEsc(active.totalSessions)} ${htmlEsc(unit)} ${htmlEsc(t('left_label'))}</span><span class="pkg-status-date">${htmlEsc(t('purchased_label'))} ${htmlEsc(fmtDate(active.purchasedDate))}</span></div>
-        <div class="pkg-status-track"><div class="pkg-status-fill" style="width:${pct}%"></div></div>
-        ${expiryLine}
-      </div>`;
-  } else if (list.length) {
-    // "No units left" covers two different situations worth telling apart:
-    // genuinely used up, vs. expired with a real balance forfeited — the
-    // latter is confusing to read as "you used it all" when you didn't.
-    const last = list[0];
-    const rawRemaining = packageRemainingIgnoringExpiry(last);
-    const msg = (packageIsExpired(last) && rawRemaining > 0)
-      ? t('package_expired_forfeited').replace('{date}', fmtDate(last.expiresAt)).replace('{n}', rawRemaining).replace('{unit}', unit)
-      : t('no_units_left').replace('{unit}', unit);
-    html += `<div class="pkg-status"><span>${htmlEsc(msg)}</span></div>`;
-  } else {
+  // TSK-024: a client can hold multiple independently-tracked packages at
+  // once now that a package can be linked to a specific service (e.g.
+  // "1-on-1 training" 9/10 and "Nutrition consult" 3/5 both active) — list
+  // every package, each tagged with its own service name, instead of
+  // collapsing down to a single "most recent" summary that hid the rest.
+  if (!list.length) {
     html += `<div class="pkg-status"><span>${htmlEsc(t('no_package_yet'))}</span></div>`;
-  }
-  if (list.length > 1 || (list.length === 1 && !active)) {
-    html += '<div class="list-card" style="margin-top:8px">' + list.map(p => {
+  } else {
+    html += '<div class="list-card">' + list.map(p => {
       const rem = packageRemaining(p);
+      const pct = p.totalSessions > 0 ? Math.round((rem / p.totalSessions) * 100) : 0;
+      const rawRemaining = packageRemainingIgnoringExpiry(p);
       const expSub = p.expiresAt ? ` · ${htmlEsc(t('expires_label'))} ${htmlEsc(fmtDate(p.expiresAt))}` : '';
+      let statusSub;
+      if (rem > 0) {
+        statusSub = `${htmlEsc(t('purchased_label'))} ${htmlEsc(fmtDate(p.purchasedDate))}${expSub}`;
+      } else if (packageIsExpired(p) && rawRemaining > 0) {
+        statusSub = htmlEsc(t('package_expired_forfeited').replace('{date}', fmtDate(p.expiresAt)).replace('{n}', rawRemaining).replace('{unit}', unit));
+      } else {
+        statusSub = htmlEsc(t('no_units_left').replace('{unit}', unit));
+      }
       return `<div class="list-row" style="cursor:default">
-          <div class="list-main"><div class="list-title">${htmlEsc(p.totalSessions)} ${htmlEsc(unit)}</div>
-          <div class="list-sub">${htmlEsc(t('purchased_label'))} ${htmlEsc(fmtDate(p.purchasedDate))}${expSub}</div></div>
-          <div class="list-right"><span class="list-amt tnum">${rem} ${htmlEsc(t('left_label'))}</span></div>
+          <div class="list-main"><div class="list-title">${htmlEsc(packageDisplayName(p))}</div>
+          <div class="list-sub">${statusSub}</div>
+          <div class="pkg-status-track" style="margin-top:6px"><div class="pkg-status-fill" style="width:${pct}%"></div></div></div>
+          <div class="list-right"><span class="list-amt tnum">${rem}/${htmlEsc(p.totalSessions)} ${htmlEsc(t('left_label'))}</span></div>
         </div>`;
     }).join('') + '</div>';
   }
+  const activeAny = activePackageFor(clientId);
+  const pkgServiceOptions = services.filter(s => !svcIsProduct(s) && Number(s.usageQty) > 1);
   html += window.__pkgFormOpen ? `
+      ${pkgServiceOptions.length ? `<div class="field" style="margin-top:10px">
+        <label for="pkg-service">${htmlEsc(t('pkg_service_label'))}</label>
+        <select id="pkg-service" onchange="onPkgServiceChange(this.value)">
+          <option value="">${htmlEsc(t('pkg_service_none'))}</option>
+          ${pkgServiceOptions.map(s => `<option value="${s.id}">${htmlEsc(s.name)}</option>`).join('')}
+        </select>
+      </div>` : ''}
       <div class="form-row" style="margin-top:10px">
         <div class="field-half"><label for="pkg-total">${htmlEsc(unit)}</label><input type="number" id="pkg-total" class="tnum" inputmode="numeric" min="1" placeholder="10"></div>
         <div class="field-half"><label for="pkg-price">${htmlEsc(t('field_price'))}</label><input type="number" id="pkg-price" class="tnum" inputmode="decimal" min="0" placeholder="0"></div>
@@ -6250,7 +6325,7 @@ function renderCustomerPackages(clientId) {
         <div class="field-half"><label for="pkg-expires">${htmlEsc(t('expires_label'))}</label><input type="date" id="pkg-expires" placeholder="${attrEsc(t('expires_ph'))}"></div>
       </div>
       <button type="button" class="btn-submit" style="margin-top:6px" onclick="savePackage(${clientId})">${htmlEsc(t('save_package'))}</button>
-    ` : `<button type="button" class="btn-submit" style="margin-top:10px" onclick="togglePackageForm(true, ${clientId})">${active ? htmlEsc(t('renew_package')) : htmlEsc(t('new_package'))}</button>`;
+    ` : `<button type="button" class="btn-submit" style="margin-top:10px" onclick="togglePackageForm(true, ${clientId})">${activeAny ? htmlEsc(t('renew_package')) : htmlEsc(t('new_package'))}</button>`;
   wrap.innerHTML = html;
   if (window.__pkgFormOpen) {
     const dateEl = document.getElementById('pkg-date');
@@ -6262,16 +6337,31 @@ function togglePackageForm(open, clientId) {
   renderCustomerPackages(clientId);
 }
 window.togglePackageForm = togglePackageForm;
+// Prefills the total/price fields from the chosen service's own package
+// numbers (usageQty/rate) — same "pick a template, don't retype it"
+// pattern as onJobServiceChange() prefilling j-amount.
+function onPkgServiceChange(v) {
+  if (!v) return;
+  const s = services.find(x => x.id === parseInt(v));
+  if (!s) return;
+  const totalEl = document.getElementById('pkg-total');
+  const priceEl = document.getElementById('pkg-price');
+  if (totalEl) totalEl.value = s.usageQty > 0 ? s.usageQty : 1;
+  if (priceEl) priceEl.value = s.rate || 0;
+}
+window.onPkgServiceChange = onPkgServiceChange;
 async function savePackage(clientId) {
   const total = parseInt(document.getElementById('pkg-total').value) || 0;
   const price = parseFloat(document.getElementById('pkg-price').value) || 0;
   const date = document.getElementById('pkg-date').value || todayISO();
   const expiresEl = document.getElementById('pkg-expires');
   const expiresAt = (expiresEl && expiresEl.value) || null;
+  const svcEl = document.getElementById('pkg-service');
+  const serviceId = (svcEl && svcEl.value) ? parseInt(svcEl.value) : null;
   if (total <= 0) { toast(t('enter_package_total').replace('{unit}', packageUnitLabel())); return; }
   if (expiresAt && expiresAt < date) { toast(t('expiry_before_purchase')); return; }
   const uid = isGuest ? 'guest' : currentUser.id;
-  const obj = { uid, clientId, totalSessions: total, price, purchasedDate: date, expiresAt, notes: '', cuid: cuid(), updatedAt: nowISO() };
+  const obj = { uid, clientId, serviceId, totalSessions: total, price, purchasedDate: date, expiresAt, notes: '', cuid: cuid(), updatedAt: nowISO() };
   await dbAdd('packages', obj);
   if (!isGuest && typeof SidekickBackend !== 'undefined' && SidekickBackend.isEnabled()) {
     SidekickBackend.mirrorPackageSave(obj).catch(() => {});
@@ -7821,7 +7911,10 @@ async function importDataset(byStore, uid) {
         } else if (s === 'documents') {
           resolveRef('clients', rest, 'clientId', '__clientCuid');
           resolveRef('invoices', rest, 'invoiceId', '__invoiceCuid');
-        } else if (s === 'packages' || s === 'progressLogs') {
+        } else if (s === 'packages') {
+          resolveRef('clients', rest, 'clientId', '__clientCuid');
+          resolveRef('services', rest, 'serviceId', '__serviceCuid');
+        } else if (s === 'progressLogs') {
           resolveRef('clients', rest, 'clientId', '__clientCuid');
         } else if (s === 'followups' && typeof rest.key === 'string') {
           // Keys embed ids as strings: `overdue:CID:INVID`, `draft:CID:INVID`,
