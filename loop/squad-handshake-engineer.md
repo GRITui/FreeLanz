@@ -17,7 +17,7 @@ owner-driven follow-ups delivered in the same PR: the Task flow + Calendar
 screens are now merged into one (Board/Timeline/Calendar toggle), and the
 Thai tagline was updated. A second chat-triggered production deploy is
 in flight for that commit (workflow run 30157135649) as of this write.
-TSK-018 part (2) also shipped (commit 508e454, PR #77 open) once the owner
+TSK-018 part (2) also shipped (commit 508e454, PR #77 merged) once the owner
 answered the open design question directly ("I don't actually use it that
 way — just remove it"): the standalone dated sub-task list is gone, with
 two non-obvious dependencies (Options compared's 📅 Book viewing, milestone
@@ -178,7 +178,7 @@ pass/fail count.
   check-scheduling.js (mirroring its own pre-existing §19 pattern for
   `'timeline'`). Full battery clean: 15 Node harnesses + 33 Playwright
   suites, 0 failures, check-scheduling.js 66/66, 0 console errors.
-* PR #77 (open, commit 508e454): **TSK-018 part 2** — job.subTasks[]'s
+* PR #77 (merged, commit abfae4d): **TSK-018 part 2** — job.subTasks[]'s
   standalone "+ Step with date" list is removed per the owner's direct
   answer to the design question PR #72's writeup left open. Kept two
   non-obvious dependencies alive, both flagged to and confirmed by the
