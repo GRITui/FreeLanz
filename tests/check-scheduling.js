@@ -221,6 +221,20 @@ const errors = [];
   assert(dateRes.bkCount === bkCountBefore + 1, '6: exactly one linked booking row created by the inline gate, got ' + JSON.stringify(dateRes));
   assert(dateRes.pending == null && !dateRes.gateOpen, '6: gate resolved (flag cleared, gate card closed)');
 
+  // ═══ 6a. TSK-018 (part 1): job.due (with a linked booking) renders as a
+  // timeline dot even with zero dated sub-tasks — jobB has none yet at this
+  // point (6b below adds one afterwards). Switch to timeline, check jobB's
+  // row, switch back so §7 continues on the board as before.
+  await page.evaluate(() => setPipelineView('timeline'));
+  await page.waitForTimeout(300);
+  const dueTl = await page.evaluate(id => {
+    const row = Array.from(document.querySelectorAll('.tl-row')).find(r => r.querySelector('.tl-label')?.textContent.includes('Gate svc'));
+    return { dots: row ? row.querySelectorAll('.tl-pt').length : -1, bars: row ? row.querySelectorAll('.tl-bar').length : -1 };
+  }, jobB);
+  assert(dueTl.dots === 1 && dueTl.bars === 0, '6a: job.due with a linked booking renders as one timeline dot, got ' + JSON.stringify(dueTl));
+  await page.evaluate(() => setPipelineView('board'));
+  await page.waitForTimeout(300);
+
   // ═══ 6b. Restore a "by" dated sub-task on jobB via the (unchanged) modal
   // add-mode — §13-15 below need a second dated-step job to exercise the
   // timeline's bar/dot mix; the inline gate never creates a job.subTasks
