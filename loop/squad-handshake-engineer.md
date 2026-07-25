@@ -17,17 +17,24 @@ owner-driven follow-ups delivered in the same PR: the Task flow + Calendar
 screens are now merged into one (Board/Timeline/Calendar toggle), and the
 Thai tagline was updated. A second chat-triggered production deploy is
 in flight for that commit (workflow run 30157135649) as of this write.
-Remaining backlog: TSK-018 part (2) (remove job.subTasks), TSK-020 (remove
-the Tools grid — orphans 4 screens as literally asked), TSK-021 (remove
-persona onboarding — persona is cross-cutting, not isolated), TSK-023
-(strip the job modal to Date/Client/Service/Notes — the highest-risk one,
-guts the app's core revenue field unless the owner specifies a
-replacement) — all still NEEDS_OWNER_REVIEW, held pending explicit owner
-direction rather than built on recommended-default guesses, since the
-owner has been giving precise instructions directly rather than picking
-from offered options. Also: the new `test` CI gate (deploy-vercel.yml,
-added this arc) had its first real production run and worked exactly as
-designed — see the correction below.
+TSK-018 part (2) also shipped (commit 508e454, PR #77 open) once the owner
+answered the open design question directly ("I don't actually use it that
+way — just remove it"): the standalone dated sub-task list is gone, with
+two non-obvious dependencies (Options compared's 📅 Book viewing, milestone
+gating) found and confirmed with the owner before building around them —
+see backlog-inbox.md's TSK-018 entry for the full writeup.
+Remaining backlog: TSK-020 (remove the Tools grid — orphans 4 screens as
+literally asked), TSK-021 (remove persona onboarding — persona is
+cross-cutting, not isolated), TSK-023 (strip the job modal to
+Date/Client/Service/Notes — the highest-risk one, guts the app's core
+revenue field unless the owner specifies a replacement) — all still
+NEEDS_OWNER_REVIEW. The owner asked for and received the squad's direct
+recommendation on all three (relocate-not-delete for TSK-020,
+onboarding-only for TSK-021, split-and-hold-the-money-fields for TSK-023)
+but hasn't yet said "go" on any of them — held pending that, rather than
+built on the recommendations unconfirmed. Also: the new `test` CI gate
+(deploy-vercel.yml, added this arc) had its first real production run and
+worked exactly as designed — see the correction below.
 
 **Correction to this file's own prior record**: the 2026-07-22 entry below
 called check-scheduling.js's occasional "64 passed, 1 failed" a pre-
@@ -171,6 +178,20 @@ pass/fail count.
   check-scheduling.js (mirroring its own pre-existing §19 pattern for
   `'timeline'`). Full battery clean: 15 Node harnesses + 33 Playwright
   suites, 0 failures, check-scheduling.js 66/66, 0 console errors.
+* PR #77 (open, commit 508e454): **TSK-018 part 2** — job.subTasks[]'s
+  standalone "+ Step with date" list is removed per the owner's direct
+  answer to the design question PR #72's writeup left open. Kept two
+  non-obvious dependencies alive, both flagged to and confirmed by the
+  owner before building: Options compared's 📅 Book viewing button (still
+  reuses openApptModal()/saveApptModal(), simplified to drop the now-dead
+  edit/repeat modes), and milestone-gating (gatingSubTaskId's "Locked"
+  chip), which gained a minimal inline one-off gate creator in the
+  "+ Add milestone" form plus a mark-done affordance on the chip itself
+  since the old list's toggle-on-click is gone. 4 test files updated
+  (check-blockers-p1.js/check-job-modal-v2.js/check-merges.js/
+  check-scheduling.js) — obsolete UI-specific assertions deleted outright,
+  no successor for a freeform undated checklist item or step repeat.
+  Full battery clean: 15 Node + 33 Playwright suites, 0 failures.
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
