@@ -86,55 +86,48 @@ const assert = (cond, msg) => { if (cond) { pass++; } else { fail++; console.log
   assert(!headerTitles.includes(subtasksTitle), '1: separate "Sub-tasks" header no longer present');
   assert(!headerTitles.includes(milestonesTitle), '1: separate "Milestone payments" header no longer present');
 
-  // ═══ 2. Both the steps list and milestone list render inside that section ═
-  assert(await pageA.locator('#job-tracking-section #job-subtasks-body').count() === 1, '2: steps list container present in the section');
+  // ═══ 2. The milestone list renders inside that section ═════════════════
+  // TSK-018 part 2: the standalone dated-step list (#job-subtasks-body,
+  // "+ Step with date") is retired per the owner ("I don't actually use it
+  // that way") — Plan & payments is milestones-only now. Milestone gating
+  // survives via a minimal inline step-creator right in the "+ Add
+  // milestone" form (see saveMilestone()/renderMilestones() in app.js).
   assert(await pageA.locator('#job-tracking-section #job-milestones-body').count() === 1, '2: milestone list container present in the section');
 
   // TSK-008: Plan & payments now lives behind Full details + a collapsed
   // drill row — switch mode and pop the row open before the UI clicks below.
   await pageA.evaluate(() => { setJobModalMode('full'); document.getElementById('job-plan-details').open = true; });
 
-  // ═══ 3. "+ Step with date" still creates a real dated step (mechanics intact) ═
-  await pageA.click('#job-tracking-section button[data-i18n="appt_add_dated"]');
-  await pageA.waitForSelector('#modal-appt', { timeout: 5000 });
-  await pageA.fill('#ap-step', 'Site visit done');
-  const futureDate = await pageA.evaluate(() => tlAddDays(todayISO(), 3));
-  await pageA.fill('#ap-date', futureDate);
-  await pageA.click('#ap-save');
-  await pageA.waitForTimeout(400);
-  const gateId = await job(jobA, `(j.subTasks.find(s => s.text === 'Site visit done') || {}).id`);
-  assert(!!gateId, '3: dated step created inside the merged section (will gate the milestone)');
-  const stepRowInSubtasksBody = await pageA.evaluate(() =>
-    document.getElementById('job-subtasks-body').textContent.includes('Site visit done'));
-  assert(stepRowInSubtasksBody, '3: the new dated step renders in #job-subtasks-body, unchanged location');
-
-  // ═══ 4. Add a milestone gated on that step → renders Locked ═════════════
+  // ═══ 4. Add a milestone gated on a brand-new inline step → renders Locked
   await pageA.click('#job-tracking-section button[data-i18n="add_milestone"]');
   await pageA.waitForTimeout(200);
   await pageA.fill('#ms-pct', '50');
   await pageA.fill('#ms-amount', '2500');
-  await pageA.selectOption('#ms-gate', gateId);
+  await pageA.fill('#ms-gate-new-text', 'Site visit done');
+  const futureDate = await pageA.evaluate(() => tlAddDays(todayISO(), 3));
+  await pageA.fill('#ms-gate-new-date', futureDate);
   await pageA.click('#job-milestones-body button[onclick*="saveMilestone"]');
   await pageA.waitForTimeout(300);
   const msId = await job(jobA, `(j.milestones && j.milestones[0] && j.milestones[0].id) || null`);
   assert(!!msId, '4: milestone saved with pct/amount/gatingSubTaskId — data model untouched');
   assert(await job(jobA, `!!(j.milestones[0].pct === 50 && j.milestones[0].amount === 2500 && j.milestones[0].gatingSubTaskId)`) === true,
     '4: milestone record shape is exactly {id, pct, amount, gatingSubTaskId}, not a step');
+  const gateId = await job(jobA, `j.milestones[0].gatingSubTaskId`);
+  assert(await job(jobA, `(j.subTasks.find(s => s.id === '${gateId}') || {}).text`) === 'Site visit done',
+    '4: the inline gate creator wrote a real job.subTasks[] entry');
   const lockedHtml = await pageA.locator('#job-milestones-body').innerHTML();
   const lockedLabel = await tA('milestone_locked');
   assert(lockedHtml.includes(lockedLabel), '4: milestone shows "Locked" while its gating step is undone');
 
-  // ═══ 5. Milestone rows carry a distinct visual badge; step rows do not ═
+  // ═══ 5. Milestone rows carry a distinct visual badge ═══════════════════
   const milestonesHtml = await pageA.evaluate(() => document.getElementById('job-milestones-body').innerHTML);
-  const subtasksHtml = await pageA.evaluate(() => document.getElementById('job-subtasks-body').innerHTML);
   assert(milestonesHtml.includes('💰'), '5: milestone rows carry a distinct badge');
-  assert(!subtasksHtml.includes('💰'), '5: step rows do NOT carry the milestone badge (visually distinct styles)');
 
   // ═══ 6. Completing the gating step unlocks the milestone ═══════════════
-  await pageA.evaluate(() => {
-    const rows = Array.from(document.querySelectorAll('#job-subtasks-body .list-row'));
-    rows.find(r => r.textContent.includes('Site visit done')).click();
-  });
+  // TSK-018 part 2: with no standalone step list to click a row in, the
+  // "Locked" chip on the milestone itself is now the mark-done affordance
+  // (toggleMilestoneGate() in app.js).
+  await pageA.click(`#job-milestones-body button[onclick*="toggleMilestoneGate"]`);
   await pageA.waitForTimeout(300);
   assert(await job(jobA, `j.subTasks.find(s => s.text === 'Site visit done').done`) === true, '6: gating step marked done');
   const unlockedHtml = await pageA.locator('#job-milestones-body').innerHTML();

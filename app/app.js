@@ -812,6 +812,8 @@ const I18N = {
     draft_invoice:'Draft invoice', milestone_locked:'Locked', no_milestones:'No milestones yet.',
     unlocks_with:'Unlocks with: ', no_gating_subtask:'No gating sub-task',
     ms_amount_label:'Amount', ms_gate_label:'Gating sub-task (optional)', ms_gate_none:'None',
+    ms_gate_new_label:'Or create a new step to gate on', ms_gate_new_ph:'Step, e.g. site visit',
+    mark_gate_done:'Mark done',
     time_tracking_title:'Time tracking', unbilled_time:'Unbilled time', start_timer:'▶ Start timer', stop_timer:'■ Stop timer',
     focus_mode_btn:'Focus mode', add_unbilled_to_invoice:'+ Add unbilled time to invoice', time_invoiced_label:'Invoiced',
     billable_session:'Billable this session:', focus_pause:'Pause', focus_resume:'Resume', focus_stop:'Stop',
@@ -1330,6 +1332,8 @@ const I18N = {
     draft_invoice:'ร่างใบแจ้งหนี้', milestone_locked:'ล็อกอยู่', no_milestones:'ยังไม่มีช่วงงาน',
     unlocks_with:'ปลดล็อกเมื่อ: ', no_gating_subtask:'ไม่มีงานย่อยที่ต้องรอ',
     ms_amount_label:'จำนวนเงิน', ms_gate_label:'งานย่อยที่ต้องรอ (ไม่บังคับ)', ms_gate_none:'ไม่มี',
+    ms_gate_new_label:'หรือสร้างขั้นตอนใหม่เพื่อรอ', ms_gate_new_ph:'ขั้นตอน เช่น นัดดูสถานที่',
+    mark_gate_done:'ทำเสร็จแล้ว',
     time_tracking_title:'บันทึกเวลา', unbilled_time:'เวลาที่ยังไม่เรียกเก็บเงิน', start_timer:'▶ เริ่มจับเวลา', stop_timer:'■ หยุดจับเวลา',
     focus_mode_btn:'โหมดโฟกัส', add_unbilled_to_invoice:'+ เพิ่มเวลาที่ยังไม่เรียกเก็บเงินลงใบแจ้งหนี้', time_invoiced_label:'ออกใบแจ้งหนี้แล้ว',
     billable_session:'เวลาที่เรียกเก็บเงินได้ในเซสชันนี้:', focus_pause:'หยุดชั่วคราว', focus_resume:'ดำเนินการต่อ', focus_stop:'หยุด',
@@ -5777,23 +5781,20 @@ window.__apType = 'exact';  // 'exact' (calendar booking) | 'by' (deadline only)
 // send (stale-flag safety).
 window.__quoteReviseJobId = null;
 window.__invoiceReviseJobId = null;
-// TSK-012: this modal used to also serve a 4th mode, 'gate' (the stage-gate
-// prompt after every forward pipeline move) — that mode is RETIRED. It's
-// replaced by the inline gate card embedded directly in the pipeline card
-// (see the STAGE-GATE INLINE CARD section, openGateCard()/gateCardHtml()),
-// per the design handoff's "inline confirm card" spec. This modal keeps
-// serving its other three modes exactly as before: 'add' (+ Step with date,
-// from job-detail), 'repeat' (↻ clone a dated step), 'edit' (✎ reschedule a
-// dated step in place) — none of that behavior changed.
+// TSK-012 retired this modal's old 'gate' mode (the stage-gate prompt after
+// every forward pipeline move) in favor of the inline gate card (see the
+// STAGE-GATE INLINE CARD section, openGateCard()/gateCardHtml()). TSK-018
+// part 2 later retired its 'repeat'/'edit' modes and the standalone
+// "+ Step with date" entry point along with the rest of the freeform
+// sub-task list — this modal now serves exactly one purpose: booking a
+// viewing date for an Options-compared candidate (bookViewingForOption()),
+// via job.subTasks[] as the underlying link to a real Calendar booking.
 function openApptModal(ctx) {
   const j = jobs.find(x => x.id === ctx.jobId);
   if (!j) return;
   document.getElementById('modal-appt')?.remove();   // never stack two
   window.__apCtx = ctx;
-  const src = ctx.sourceSubTaskId ? (j.subTasks || []).find(s => s.id === ctx.sourceSubTaskId) : null;
-  if (ctx.mode === 'edit' && !src) return;   // step deleted underneath the ✎ tap
-  const title = ctx.mode === 'repeat' ? t('appt_repeat_title')
-    : ctx.mode === 'edit' ? t('appt_edit_title') : t('appt_add_dated');
+  const title = t('appt_add_dated');
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay open';
   overlay.id = 'modal-appt';
@@ -5802,20 +5803,19 @@ function openApptModal(ctx) {
       <div class="modal-handle"></div>
       <div class="modal-title" id="ap-title">${htmlEsc(title)}</div>
       <div class="form-body" style="padding:0 20px 4px">
-        <div class="field"><input type="text" id="ap-step" placeholder="${attrEsc(t('appt_step_ph'))}" value="${attrEsc(src ? src.text : (ctx.prefillText || ''))}"></div>
+        <div class="field"><input type="text" id="ap-step" placeholder="${attrEsc(t('appt_step_ph'))}" value="${attrEsc(ctx.prefillText || '')}"></div>
         <div class="ap-seg">
           <button type="button" id="ap-type-exact" class="seg-active" onclick="setApptType('exact')">${htmlEsc(t('appt_type_exact'))}</button>
           <button type="button" id="ap-type-by" onclick="setApptType('by')">${htmlEsc(t('appt_type_by'))}</button>
         </div>
-        <div class="field" id="ap-date-row"><label id="ap-date-label">${htmlEsc(t('appt_date_label'))}</label><input type="date" id="ap-date" value="${attrEsc(ctx.mode === 'edit' && src ? (src.date || '') : '')}"></div>
-        <div class="field" id="ap-time-row"><label>${htmlEsc(t('appt_time_label'))}</label><input type="time" id="ap-time" value="${attrEsc(ctx.mode === 'edit' && src && src.startTime ? src.startTime : '09:00')}"></div>
+        <div class="field" id="ap-date-row"><label id="ap-date-label">${htmlEsc(t('appt_date_label'))}</label><input type="date" id="ap-date" value=""></div>
+        <div class="field" id="ap-time-row"><label>${htmlEsc(t('appt_time_label'))}</label><input type="time" id="ap-time" value="09:00"></div>
       </div>
       <button type="button" class="btn-submit" id="ap-save" onclick="saveApptModal()">${htmlEsc(t('appt_save'))}</button>
     </div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener('click', e => { if (e.target === overlay) closeApptModal(); });
-  // Repeat mode inherits the source step's type; everything else starts 'exact'.
-  setApptType(src && src.dateType === 'by' ? 'by' : 'exact');
+  setApptType('exact');
 }
 window.openApptModal = openApptModal;
 
@@ -5842,48 +5842,8 @@ async function saveApptModal() {
   if (!date) { toast(t('appt_err_date')); return; }
   const timeVal = (document.getElementById('ap-time') || {}).value || '';
 
-  if (ctx.mode === 'edit') {
-    // Reschedule in place: mutate the source step, then reconcile its
-    // linked calendar booking in the SAME save — update it when it stays
-    // 'exact', remove it on exact→by (a deadline has no calendar entry),
-    // create one on by→exact. All-or-nothing with the step's own dbPut so
-    // the calendar can't drift from the step (assessment gap #3).
-    const st = (j.subTasks || []).find(s => s.id === ctx.sourceSubTaskId);
-    if (!st) { closeApptModal(); return; }
-    st.text = text;
-    st.dateType = window.__apType;
-    st.date = date;
-    st.startTime = window.__apType === 'exact' ? (timeVal || '09:00') : null;
-    if (st.bookingCuid && st.dateType === 'exact') {
-      const row = (await dbAll('bookings')).find(b => b.cuid === st.bookingCuid);
-      if (row) {
-        row.date = st.date; row.startTime = st.startTime;
-        row.title = st.text + (j.client ? ' — ' + j.client : '');
-        row.updatedAt = nowISO();
-        await dbPut('bookings', row);
-        if (!isGuest && typeof SidekickBackend !== 'undefined' && SidekickBackend.isEnabled())
-          SidekickBackend.mirrorBookingSave(row).catch(() => {});
-      } else {
-        await createBookingForStep(j, st);   // booking deleted elsewhere — recreate the link
-      }
-    } else if (st.bookingCuid && st.dateType === 'by') {
-      await deleteBookingByCuid(st.bookingCuid);
-      st.bookingCuid = null;
-    } else if (!st.bookingCuid && st.dateType === 'exact') {
-      await createBookingForStep(j, st);
-    }
-    j.updatedAt = nowISO();
-    await dbPut('jobs', j);
-    mirrorJob(j);
-    closeApptModal();
-    renderJobTracking(ctx.jobId);
-    toast(t('appt_step_updated_toast'));
-    return;
-  }
-
   const st = { id: cuid(), text, done: false, dateType: window.__apType, date,
-    startTime: window.__apType === 'exact' ? (timeVal || '09:00') : null,
-    bookingCuid: null, stage: ctx.stage ?? null, repeatOfId: ctx.sourceSubTaskId ?? null };
+    startTime: window.__apType === 'exact' ? (timeVal || '09:00') : null, bookingCuid: null };
   j.subTasks = j.subTasks || [];
   j.subTasks.push(st);
   if (st.dateType === 'exact') await createBookingForStep(j, st);
@@ -6817,16 +6777,15 @@ function renderJobTracking(jobId) {
   if (!j) return;
   renderJobOptions(jobId);
   renderJobItems(jobId);
-  renderSubTasks(jobId);
   renderMilestones(jobId);
   renderJobTimer(jobId);
 }
 
 // TSK-008: keeps each drill row's "· N" count in sync with the underlying
-// job record. Called from the tail of each of the 5 render*() functions
-// above (not just renderJobTracking) so every mutation path — whether it
-// re-renders just its own section (addJobOption etc.) or the whole tracking
-// block (addSubTask/timer start-stop etc.) — updates the count too.
+// job record. Called from the tail of each render*() function above (not
+// just renderJobTracking) so every mutation path — whether it re-renders
+// just its own section (addJobOption etc.) or the whole tracking block
+// (timer start-stop etc.) — updates the count too.
 // #job-options-title itself is left untouched (persona-dependent text,
 // compared for exact equality by tests/check-options-lost.js); the count
 // lives in the separate sibling span next to it.
@@ -6836,91 +6795,21 @@ function updateJobDrillSummaries(jobId) {
   const setCount = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text ? ` · ${text}` : ''; };
   setCount('job-options-count', (j.options || []).length || '');
   setCount('job-items-count', (j.items || []).length || '');
-  const subs = (j.subTasks || []).length, miles = (j.milestones || []).length;
-  const planParts = [];
-  if (subs) planParts.push(`${subs} ${t('drill_steps_unit')}`);
-  if (miles) planParts.push(`${miles} ${t('drill_milestones_unit')}`);
-  setCount('job-plan-count', planParts.join(' · '));
+  // TSK-018 part 2: Plan & payments dropped its sub-task listing (see
+  // job-plan-details in index.html) — its count is milestones-only now.
+  // job.subTasks[] itself still exists for Options compared's booked
+  // viewings, but those show under Options compared's own count instead.
+  const miles = (j.milestones || []).length;
+  setCount('job-plan-count', miles ? `${miles} ${t('drill_milestones_unit')}` : '');
   const totalMin = (j.timeEntries || []).reduce((s, e) => s + (Number(e.minutes) || 0), 0);
   const running = !!j.timerStartedAt;
   setCount('job-time-count', (totalMin > 0 || running) ? `${fmtHM(totalMin)}${running ? ' ' + t('drill_running_suffix') : ''}` : '');
 }
 
-// ── Sub-tasks ──
-function renderSubTasks(jobId) {
-  const wrap = document.getElementById('job-subtasks-body');
-  if (!wrap) return;
-  const j = jobs.find(x => x.id === jobId);
-  if (!j) return;
-  const subs = j.subTasks || [];
-  if (!subs.length) { wrap.innerHTML = `<div class="pkg-status"><span>${htmlEsc(t('no_subtasks'))}</span></div>`; updateJobDrillSummaries(jobId); return; }
-  const done = subs.filter(s => s.done).length;
-  wrap.innerHTML = `
-    <div class="pkg-status-row" style="margin-bottom:8px"><span>${done} of ${subs.length} done</span></div>
-    <div class="pkg-status-track" style="margin-bottom:10px"><div class="pkg-status-fill" style="width:${subs.length ? Math.round(done / subs.length * 100) : 0}%"></div></div>
-    <div class="list-card">${subs.map(s => `
-      <div class="list-row" style="cursor:pointer" onclick="toggleSubTask(${jobId},'${s.id}')">
-        <input type="checkbox" style="width:20px;height:20px;flex-shrink:0;pointer-events:none" ${s.done ? 'checked' : ''}>
-        <div class="list-main"><div class="list-title" style="${s.done ? 'text-decoration:line-through;color:var(--text3)' : ''}">${htmlEsc(s.text)}</div>${subTaskDateChip(s)}</div>
-        ${s.dateType ? `<button type="button" class="qc-btn" aria-label="${attrEsc(t('appt_edit'))}" onclick="event.stopPropagation();editSubTask(${jobId},'${s.id}')">✎</button>
-        <button type="button" class="qc-btn" aria-label="${attrEsc(t('appt_repeat'))}" onclick="event.stopPropagation();repeatSubTask(${jobId},'${s.id}')">↻</button>` : ''}
-        <button type="button" class="qc-btn" aria-label="Delete sub-task" onclick="event.stopPropagation();deleteSubTask(${jobId},'${s.id}')">✕</button>
-      </div>`).join('')}</div>
-  `;
-  updateJobDrillSummaries(jobId);
-}
-// Date chip under a dated sub-task's title. Falsy dateType = undated legacy
-// row → empty string, so those rows render byte-identically to before dated
-// steps existed (hard compat rule: no migration pass, nothing new to see).
-function subTaskDateChip(s) {
-  if (!s.dateType) return '';
-  const overdue = !s.done && s.date && s.date < todayISO();
-  const label = s.dateType === 'by'
-    ? t('appt_by_chip').replace('{date}', fmtDate(s.date))
-    : `📅 ${fmtDate(s.date)}${s.startTime ? ' ' + s.startTime : ''}`;
-  return `<div><span class="chip st-chip${overdue ? ' chip-overdue' : ''}">${overdue ? htmlEsc(t('appt_overdue')) + ' · ' : ''}${htmlEsc(label)}</span></div>`;
-}
-async function addSubTask(jobId) {
-  jobId = parseInt(jobId, 10);
-  const input = document.getElementById('job-subtask-new');
-  const text = (input.value || '').trim();
-  if (!text) return;
-  const j = jobs.find(x => x.id === jobId);
-  if (!j) return;
-  j.subTasks = j.subTasks || [];
-  j.subTasks.push({ id: cuid(), text, done: false });
-  await dbPut('jobs', j);
-  mirrorJob(j);
-  input.value = '';
-  input.focus();   // stay focused so adding several in a row doesn't need re-tapping the field
-  renderJobTracking(jobId);
-}
-window.addSubTask = addSubTask;
-async function toggleSubTask(jobId, subId) {
-  const j = jobs.find(x => x.id === jobId);
-  if (!j || !j.subTasks) return;
-  const s = j.subTasks.find(x => x.id === subId);
-  if (!s) return;
-  s.done = !s.done;
-  await dbPut('jobs', j);
-  mirrorJob(j);
-  renderJobTracking(jobId);
-}
-window.toggleSubTask = toggleSubTask;
-async function deleteSubTask(jobId, subId) {
-  const j = jobs.find(x => x.id === jobId);
-  if (!j || !j.subTasks) return;
-  const st = j.subTasks.find(x => x.id === subId);
-  j.subTasks = j.subTasks.filter(x => x.id !== subId);
-  await dbPut('jobs', j);
-  mirrorJob(j);
-  // A gate-created calendar booking must not outlive its step — leaving it
-  // would accumulate ghost appointments on the calendar (the "delete
-  // orphans the booking" gap the sub-task workflow assessment flagged).
-  if (st && st.bookingCuid) await deleteBookingByCuid(st.bookingCuid);
-  renderJobTracking(jobId);
-}
-window.deleteSubTask = deleteSubTask;
+// TSK-018 part 2: the freeform sub-task list (add/toggle/delete/edit/repeat
+// arbitrary dated or undated reminders) is removed — job.subTasks[] is now
+// written only by bookViewingForOption() (Options compared's 📅 button),
+// never read/rendered as a standalone list.
 // Booking rows are keyed by autoincrement id locally but linked from steps
 // by cuid (the only stable cross-device key) — resolve, delete, and mirror.
 async function deleteBookingByCuid(bookingCuid) {
@@ -6931,28 +6820,6 @@ async function deleteBookingByCuid(bookingCuid) {
     SidekickBackend.mirrorBookingDelete(bookingCuid).catch(() => {});
   }
 }
-// Repeat a dated step (↻): opens the shared appointment modal in repeat mode
-// with the source step's text + type prefilled and the date empty — one tap
-// plus one date = a new occurrence. The clone records repeatOfId (see
-// saveApptModal); the source row is never touched.
-function repeatSubTask(jobId, subTaskId) {
-  jobId = parseInt(jobId, 10);
-  const j = jobs.find(x => x.id === jobId);
-  if (!j || !(j.subTasks || []).some(s => s.id === subTaskId)) return;
-  openApptModal({ mode: 'repeat', jobId, sourceSubTaskId: subTaskId });
-}
-window.repeatSubTask = repeatSubTask;
-// Reschedule a dated step (✎): same modal in edit mode — everything
-// prefilled including the current date/time; save mutates the step and
-// moves its linked calendar booking in the same write (see saveApptModal).
-function editSubTask(jobId, subTaskId) {
-  jobId = parseInt(jobId, 10);
-  const j = jobs.find(x => x.id === jobId);
-  if (!j || !(j.subTasks || []).some(s => s.id === subTaskId)) return;
-  openApptModal({ mode: 'edit', jobId, sourceSubTaskId: subTaskId });
-}
-window.editSubTask = editSubTask;
-
 // ── Options compared (job.options[]) ──
 // One deal, several candidates — the realestate "client is weighing 5
 // buildings" case (label becomes "Buildings" for that persona), but the same
@@ -7009,7 +6876,7 @@ async function addJobOption(jobId) {
   await dbPut('jobs', j);
   mirrorJob(j);
   input.value = '';
-  input.focus();   // same add-several-in-a-row affordance as addSubTask
+  input.focus();   // stays focused so adding several in a row doesn't need re-tapping the field
   renderJobOptions(jobId);
 }
 window.addJobOption = addJobOption;
@@ -7051,7 +6918,7 @@ function bookViewingForOption(jobId, optId) {
   const j = jobs.find(x => x.id === jobId);
   const o = j && (j.options || []).find(x => x.id === optId);
   if (!o) return;
-  openApptModal({ mode: 'add', jobId, optionId: optId, prefillText: `${t('option_book_btn')} · ${o.name}` });
+  openApptModal({ jobId, optionId: optId, prefillText: `${t('option_book_btn')} · ${o.name}` });
 }
 window.bookViewingForOption = bookViewingForOption;
 
@@ -7159,7 +7026,7 @@ function renderMilestones(jobId) {
             ? `<span class="chip" style="background:var(--brand-tint);color:var(--brand)">${htmlEsc(t('time_invoiced_label'))}</span>`
             : ready
               ? `<button type="button" class="qc-btn" style="width:auto;padding:0 10px;color:var(--brand)" onclick="draftMilestoneInvoice(${jobId},'${m.id}')">${htmlEsc(t('draft_invoice'))}</button>`
-              : `<span class="chip" style="background:var(--border);color:var(--text3)">${htmlEsc(t('milestone_locked'))}</span>`}
+              : `<button type="button" class="qc-btn" style="width:auto;padding:0 10px;background:var(--border);color:var(--text3)" title="${attrEsc(t('mark_gate_done'))}" onclick="toggleMilestoneGate(${jobId},'${m.id}')">${htmlEsc(t('milestone_locked'))}</button>`}
           <button type="button" class="qc-btn" aria-label="Delete milestone" onclick="deleteMilestone(${jobId},'${m.id}')">✕</button>
         </div>
       </div>`;
@@ -7174,6 +7041,10 @@ function renderMilestones(jobId) {
       <div class="field"><label for="ms-gate">${htmlEsc(t('ms_gate_label'))}</label>
         <select id="ms-gate"><option value="">${htmlEsc(t('ms_gate_none'))}</option>${subs.map(s => `<option value="${s.id}">${htmlEsc(s.text)}</option>`).join('')}</select>
       </div>
+      <div class="field"><label for="ms-gate-new-text">${htmlEsc(t('ms_gate_new_label'))}</label>
+        <input type="text" id="ms-gate-new-text" placeholder="${attrEsc(t('ms_gate_new_ph'))}">
+      </div>
+      <div class="field"><input type="date" id="ms-gate-new-date"></div>
       <button type="button" class="btn-submit" style="margin-top:6px" onclick="saveMilestone(${jobId})">${htmlEsc(t('save_milestone'))}</button>
     `;
   }
@@ -7188,10 +7059,23 @@ window.addMilestone = addMilestone;
 async function saveMilestone(jobId) {
   const pct = parseFloat(document.getElementById('ms-pct').value) || 0;
   const amount = parseFloat(document.getElementById('ms-amount').value) || 0;
-  const gatingSubTaskId = document.getElementById('ms-gate').value || null;
   if (amount <= 0) { toast('Enter the milestone amount'); return; }
   const j = jobs.find(x => x.id === jobId);
   if (!j) return;
+  let gatingSubTaskId = document.getElementById('ms-gate').value || null;
+  // TSK-018 part 2: with the standalone dated-step list gone, a milestone
+  // can still gate on a brand-new one-off step created right here — this is
+  // the only remaining way to gate a milestone for a job with no Options
+  // compared entries. Takes priority over the dropdown when both are filled.
+  const newGateText = ((document.getElementById('ms-gate-new-text') || {}).value || '').trim();
+  const newGateDate = (document.getElementById('ms-gate-new-date') || {}).value || '';
+  if (newGateText && newGateDate) {
+    const st = { id: cuid(), text: newGateText, done: false, dateType: 'exact', date: newGateDate, startTime: '09:00', bookingCuid: null };
+    j.subTasks = j.subTasks || [];
+    j.subTasks.push(st);
+    await createBookingForStep(j, st);
+    gatingSubTaskId = st.id;
+  }
   j.milestones = j.milestones || [];
   j.milestones.push({ id: cuid(), pct, amount, gatingSubTaskId });
   await dbPut('jobs', j);
@@ -7209,6 +7093,21 @@ async function deleteMilestone(jobId, msId) {
   renderMilestones(jobId);
 }
 window.deleteMilestone = deleteMilestone;
+// TSK-018 part 2: with the standalone dated-step list (and its toggle-on-
+// click row) gone, this is the only remaining way to mark a gating step
+// done and unlock its milestone — lives right on the "Locked" chip itself.
+async function toggleMilestoneGate(jobId, msId) {
+  const j = jobs.find(x => x.id === jobId);
+  if (!j) return;
+  const m = (j.milestones || []).find(x => x.id === msId);
+  const st = m && (j.subTasks || []).find(s => s.id === m.gatingSubTaskId);
+  if (!st) return;
+  st.done = !st.done;
+  await dbPut('jobs', j);
+  mirrorJob(j);
+  renderMilestones(jobId);
+}
+window.toggleMilestoneGate = toggleMilestoneGate;
 function draftMilestoneInvoice(jobId, msId) {
   const j = jobs.find(x => x.id === jobId);
   if (!j) return;
