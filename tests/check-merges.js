@@ -94,9 +94,9 @@ const assert = (cond, msg) => { if (cond) { pass++; } else { fail++; console.log
   // milestone" form (see saveMilestone()/renderMilestones() in app.js).
   assert(await pageA.locator('#job-tracking-section #job-milestones-body').count() === 1, '2: milestone list container present in the section');
 
-  // TSK-008: Plan & payments now lives behind Full details + a collapsed
-  // drill row — switch mode and pop the row open before the UI clicks below.
-  await pageA.evaluate(() => { setJobModalMode('full'); document.getElementById('job-plan-details').open = true; });
+  // TSK-023 removed the Quick log/Full details toggle — Plan & payments is
+  // always shown now; just pop the drill row open before the UI clicks below.
+  await pageA.evaluate(() => { document.getElementById('job-plan-details').open = true; });
 
   // ═══ 4. Add a milestone gated on a brand-new inline step → renders Locked
   await pageA.click('#job-tracking-section button[data-i18n="add_milestone"]');

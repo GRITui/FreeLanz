@@ -4137,21 +4137,17 @@ function refreshJobPackageRow(clientId, existingPackageId) {
     if (!pkg) pkg = activePackageFor(cid);
   }
   if (!pkg) {
-    row.dataset.wantShow = 'false';   // TSK-008: business-logic want-shown flag; applyJobModalMode() ANDs this with the Quick/Full mode gate
     row.style.display = 'none';
     hidden.value = '';
     checkbox.checked = false;
-    applyJobModalMode();
     return;
   }
-  row.dataset.wantShow = 'true';
   row.style.display = 'flex';
   hidden.value = pkg.id;
   label.textContent = `${t('apply_to_package')} (${packageRemaining(pkg)} ${t('of_label')} ${pkg.totalSessions} ${t('left_label')})`;
   checkbox.checked = existingPackageId != null ? existingPackageId === pkg.id : true;
   const countLabel = document.getElementById('j-count-label');
   if (countLabel) countLabel.textContent = packageUnitLabel();
-  applyJobModalMode();   // re-apply the Quick/Full gate on top of the row's own visibility logic
   refreshPackageFastPathButton(cid);
 }
 // "Ship remaining service" fast path — for a client who already has an
@@ -4276,46 +4272,12 @@ function onJobServiceChange(v) {
   const s = services.find(x => x.id === parseInt(v));
   if (s) { document.getElementById('j-amount').value = s.rate; calcNet(); }
 }
-// TSK-008: Quick log / Full details segmented control (design-handoff
-// README §2). This is a presentation-only toggle — every field/section
-// stays in the DOM regardless of mode and keeps whatever value it was
-// populated with, so saveJob() and the sub-feature renderers (renderJob
-// Options/Items/SubTasks/Milestones/Timer) are completely unaffected; only
-// applyJobModalMode()'s display toggles change. That's also what keeps the
-// existing Playwright suites working: they can still reach every element
-// by id, they just need to open the relevant drill row (or switch to Full
-// details) first — see tests/check-*.js and check-job-modal-v2.js.
-let jobModalMode = 'quick';
-function setJobModalMode(mode) {
-  jobModalMode = (mode === 'full') ? 'full' : 'quick';
-  applyJobModalMode();
-}
-window.setJobModalMode = setJobModalMode;
-function applyJobModalMode() {
-  const full = jobModalMode === 'full';
-  const quickSeg = document.getElementById('seg-job-quick');
-  const fullSeg = document.getElementById('seg-job-full');
-  if (quickSeg) quickSeg.classList.toggle('on', !full);
-  if (fullSeg) fullSeg.classList.toggle('on', full);
-  // Full-details-only fields: Service, Expense/Sessions, Notes.
-  ['j-service-field', 'j-full-row', 'j-notes-field'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = full ? '' : 'none';
-  });
-  // j-package-row has its own show/hide business logic (refreshJobPackageRow,
-  // gated on whether the selected client actually has a linked/active
-  // package) — this only ANDs the Quick/Full mode on top of that, it never
-  // shows the row when the business logic itself says there's no package.
-  const pkgRow = document.getElementById('j-package-row');
-  if (pkgRow) pkgRow.style.display = (full && pkgRow.dataset.wantShow === 'true') ? 'flex' : 'none';
-  // The 4 drill-row sections only ever exist once a job is saved (edit
-  // mode) — add-mode has nothing to show yet (sub-tasks/milestones/items/
-  // options/time all need a saved job id). openAddJob/openEditJob stamp
-  // dataset.editMode so add-mode stays hidden even if Full details is tapped.
-  const tracking = document.getElementById('job-tracking-section');
-  if (tracking && tracking.dataset.editMode === 'true') tracking.style.display = full ? 'block' : 'none';
-}
-window.applyJobModalMode = applyJobModalMode;
+// TSK-023: the Quick log/Full details toggle (TSK-008) is removed per the
+// owner — every field/section is always shown now. j-package-row keeps its
+// own show/hide business logic (refreshJobPackageRow(), gated on whether
+// the selected client has a linked/active package). job-tracking-section
+// keeps its own edit-mode gate below (add-mode has nothing to show yet —
+// options/milestones both need a saved job id).
 function openAddJob(dateISO) {
   document.getElementById('modal-title').textContent = t('add_job');
   document.getElementById('j-edit-id').value = '';
@@ -4323,12 +4285,11 @@ function openAddJob(dateISO) {
   ['j-amount','j-tip','j-expense','j-count','j-notes'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   populateJobSelects('', '');
   resetPackageFastPath();
-  // Sub-tasks/milestones/time tracking all need a saved job id to attach to.
+  // Options/milestones both need a saved job id to attach to — add-mode
+  // has nothing to show yet.
   const tracking = document.getElementById('job-tracking-section');
-  if (tracking) tracking.dataset.editMode = 'false';
-  jobModalMode = 'quick';   // a brand-new job always opens Quick log
-  refreshJobPackageRow(null, null);   // also applies the mode (calls applyJobModalMode())
-  applyJobModalMode();
+  if (tracking) tracking.style.display = 'none';
+  refreshJobPackageRow(null, null);
   document.getElementById('j-delete').style.display = 'none';
   clearFieldErrors();
   calcNet();
@@ -4345,23 +4306,12 @@ function openEditJob(id) {
   set('j-amount', j.amount); set('j-tip', j.tip);
   set('j-expense', j.expense); set('j-count', j.count); set('j-notes', j.notes);
   populateJobSelects(j.clientId != null ? j.clientId : '', j.serviceId != null ? j.serviceId : '');
-  // TSK-008 design decision (research map §5): an edit must never silently
-  // hide data the job already has behind Quick log — so a job carrying
-  // anything in a "full" field (expense, notes, sessions, or any sub-
-  // feature: options/items/plan-and-payments/time) opens straight into
-  // Full details. Only a genuinely empty job defaults to Quick log.
-  const hasFullData = (Number(j.expense) > 0) || !!(j.notes && String(j.notes).trim()) ||
-    (Number(j.count) > 0) || ((j.subTasks || []).length > 0) || ((j.milestones || []).length > 0) ||
-    ((j.items || []).length > 0) || ((j.options || []).length > 0) ||
-    ((j.timeEntries || []).length > 0) || !!j.timerStartedAt;
-  jobModalMode = hasFullData ? 'full' : 'quick';
   const tracking = document.getElementById('job-tracking-section');
-  if (tracking) tracking.dataset.editMode = 'true';
+  if (tracking) tracking.style.display = 'block';
   refreshJobPackageRow(j.clientId, j.packageId != null ? j.packageId : null);
   document.getElementById('j-delete').style.display = 'block';
   window.__milestoneFormOpen = false;
   renderJobTracking(id);
-  applyJobModalMode();
   clearFieldErrors();
   calcNet();
   openJobModal();
@@ -4369,7 +4319,6 @@ function openEditJob(id) {
 function openJobModal() { document.getElementById('modal-job').classList.add('open'); }
 function closeJobModal() {
   document.getElementById('modal-job').classList.remove('open');
-  clearInterval(_jobTimerTickHandle);
 }
 
 function calcNet() {
@@ -4466,10 +4415,9 @@ async function saveJob() {
     obj.outcome = prev.outcome ?? null;
     obj.lostReason = prev.lostReason ?? null;
     obj.options = prev.options || [];
-    // Pass M3-L2: items are edited live inside THIS modal (addJobItem/
-    // removeJobItem dbPut the job record directly, same as options above),
-    // so `prev` already reflects whatever's current by the time Save is
-    // clicked — this is the current edited array, not a stale snapshot.
+    // TSK-023 removed the UI that could ever add to this (Items on this
+    // engagement) — preserved here purely so an existing job's historical
+    // items survive an unrelated edit instead of being wiped.
     obj.items = prev.items || [];
   } else {
     obj.cuid = cuid();
@@ -6767,25 +6715,25 @@ function renderClientPersonaTracker(clientId) {
   }
 }
 
-// ─── SUB-TASKS, MILESTONES, TIME TRACKING (redesign handoff, client-side) ──
-// All three live directly on the job record (subTasks[]/milestones[]/
-// timeEntries[]) — no new IndexedDB store, matching "no backend needed" per
-// the handoff's BACKEND-REQUIREMENTS.md. The 6-stage Task flow stays the
-// spine; these live inside a job's own edit modal, never as extra columns.
+// ─── OPTIONS COMPARED, MILESTONES (redesign handoff, client-side) ──────
+// Both live directly on the job record (options[]/milestones[]) — no new
+// IndexedDB store, matching "no backend needed" per the handoff's
+// BACKEND-REQUIREMENTS.md. The 6-stage Task flow stays the spine; these
+// live inside a job's own edit modal, never as extra columns. TSK-023
+// removed Items on this engagement and Time tracking (+ Focus mode) —
+// each was its own self-contained feature with no other entry point.
 function renderJobTracking(jobId) {
   const j = jobs.find(x => x.id === jobId);
   if (!j) return;
   renderJobOptions(jobId);
-  renderJobItems(jobId);
   renderMilestones(jobId);
-  renderJobTimer(jobId);
 }
 
 // TSK-008: keeps each drill row's "· N" count in sync with the underlying
 // job record. Called from the tail of each render*() function above (not
 // just renderJobTracking) so every mutation path — whether it re-renders
-// just its own section (addJobOption etc.) or the whole tracking block
-// (timer start-stop etc.) — updates the count too.
+// just its own section (addJobOption etc.) or the whole tracking block —
+// updates the count too.
 // #job-options-title itself is left untouched (persona-dependent text,
 // compared for exact equality by tests/check-options-lost.js); the count
 // lives in the separate sibling span next to it.
@@ -6794,16 +6742,12 @@ function updateJobDrillSummaries(jobId) {
   if (!j) return;
   const setCount = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text ? ` · ${text}` : ''; };
   setCount('job-options-count', (j.options || []).length || '');
-  setCount('job-items-count', (j.items || []).length || '');
   // TSK-018 part 2: Plan & payments dropped its sub-task listing (see
   // job-plan-details in index.html) — its count is milestones-only now.
   // job.subTasks[] itself still exists for Options compared's booked
   // viewings, but those show under Options compared's own count instead.
   const miles = (j.milestones || []).length;
   setCount('job-plan-count', miles ? `${miles} ${t('drill_milestones_unit')}` : '');
-  const totalMin = (j.timeEntries || []).reduce((s, e) => s + (Number(e.minutes) || 0), 0);
-  const running = !!j.timerStartedAt;
-  setCount('job-time-count', (totalMin > 0 || running) ? `${fmtHM(totalMin)}${running ? ' ' + t('drill_running_suffix') : ''}` : '');
 }
 
 // TSK-018 part 2: the freeform sub-task list (add/toggle/delete/edit/repeat
@@ -6922,81 +6866,11 @@ function bookViewingForOption(jobId, optId) {
 }
 window.bookViewingForOption = bookViewingForOption;
 
-// ── Engagement items (Pass M3-L2) ──
-// Products/extra services attached to this engagement while the deal is
-// still forming — a catalog pick + qty, snapshotted (name/unitPrice) at add
-// time so a later catalog price edit never rewrites history. Same live-
-// persist pattern as options above: addJobItem/removeJobItem dbPut the job
-// record directly and immediately, independent of the modal's Save button,
-// so saveJob()'s edit-preserve block (`obj.items = prev.items || []`) always
-// carries forward whatever's current — see that block's own comment.
-// serviceId rides along so openQuoteForJob/openInvoiceForm can flow these
-// into the quote + invoice as linked lines (app.js's own
-// decrementStockForInvoicePaid then finds them by serviceId at paid time).
-function renderJobItems(jobId) {
-  const wrap = document.getElementById('job-items-body');
-  if (!wrap) return;
-  const j = jobs.find(x => x.id === jobId);
-  if (!j) return;
-  const items = j.items || [];
-  const rows = items.map(it => `
-      <div class="list-row" style="cursor:default;flex-wrap:wrap;gap:6px">
-        <div class="list-main">
-          <div class="list-title">${htmlEsc(it.name)}</div>
-          <div class="list-sub tnum">${it.qty} × ${htmlEsc(money(it.unitPrice))} = ${htmlEsc(money(it.qty * it.unitPrice))}</div>
-        </div>
-        <button type="button" class="qc-btn" aria-label="Remove item" onclick="removeJobItem(${jobId},'${it.id}')">✕</button>
-      </div>`).join('');
-  // Same 📦-prefix / disabled-at-zero-stock convention as invoices.js's
-  // #inv-svc picker (Pass M3-L1) — both kinds of catalog record are eligible.
-  const catalogOpts = `<option value="">${htmlEsc(t('none_option'))}</option>` +
-    services.map(s => {
-      const isProduct = svcIsProduct(s);
-      const outOfStock = isProduct && s.stockQty != null && s.stockQty === 0;
-      const label = (isProduct ? '📦 ' : '') + s.name + ' · ' + money(s.rate);
-      return `<option value="${s.id}"${outOfStock ? ' disabled' : ''}>${htmlEsc(label)}</option>`;
-    }).join('');
-  wrap.innerHTML = `
-    ${items.length ? `<div class="list-card">${rows}</div>` : `<div class="pkg-status"><span>${htmlEsc(t('job_items_none'))}</span></div>`}
-    <div class="form-row" style="margin-top:8px">
-      <select id="job-item-svc" style="flex:1;padding:11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card);color:var(--text);font-family:inherit;font-size:14px">${catalogOpts}</select>
-      <input type="number" id="job-item-qty" class="tnum" inputmode="numeric" min="1" value="1" placeholder="${attrEsc(t('job_items_qty_ph'))}"
-             style="width:64px;padding:11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card);color:var(--text);font-family:inherit;font-size:14px">
-      <button type="button" class="qc-btn" style="width:auto;padding:0 14px" onclick="addJobItem(${jobId})">${htmlEsc(t('job_items_add'))}</button>
-    </div>`;
-  updateJobDrillSummaries(jobId);
-}
-async function addJobItem(jobId) {
-  jobId = parseInt(jobId, 10);
-  const svcSel = document.getElementById('job-item-svc');
-  const qtyInput = document.getElementById('job-item-qty');
-  const svcId = svcSel && svcSel.value ? parseInt(svcSel.value, 10) : null;
-  if (svcId == null) return;
-  const svc = services.find(s => s.id === svcId);
-  if (!svc) return;
-  const qty = Math.max(1, parseInt(qtyInput && qtyInput.value, 10) || 1);
-  const j = jobs.find(x => x.id === jobId);
-  if (!j) return;
-  j.items = j.items || [];
-  // Snapshot name/unitPrice now — a later catalog edit must not rewrite
-  // what was actually agreed on this engagement.
-  j.items.push({ id: cuid(), serviceId: svc.id, name: svc.name, qty, unitPrice: Number(svc.rate) || 0 });
-  j.updatedAt = nowISO();
-  await dbPut('jobs', j);
-  mirrorJob(j);
-  renderJobItems(jobId);
-}
-window.addJobItem = addJobItem;
-async function removeJobItem(jobId, itemId) {
-  const j = jobs.find(x => x.id === jobId);
-  if (!j || !j.items) return;
-  j.items = j.items.filter(x => x.id !== itemId);
-  j.updatedAt = nowISO();
-  await dbPut('jobs', j);
-  mirrorJob(j);
-  renderJobItems(jobId);
-}
-window.removeJobItem = removeJobItem;
+// TSK-023: "Items on this engagement" (Pass M3-L2) is removed per the
+// owner — addJobItem()/removeJobItem() had no entry point besides this
+// drill row, so job.items[] can no longer gain new entries. Existing jobs'
+// items still flow into quotes/invoices as before (openQuoteForJob/
+// openInvoiceForm just read job.items regardless of how it got there).
 
 // ── Milestone payments ──
 // "Draft invoice" opens a pre-filled invoice form; the resulting invoiceId
@@ -7142,168 +7016,12 @@ window.onMilestoneInvoiceCreated = async function (invoiceId, jobId, milestoneId
 };
 
 // ── Time tracking + Focus mode ──
-// One timer per job at a time (job.timerStartedAt, an ISO timestamp — null
-// when nothing's running), persisted so it survives the modal being closed
-// and reopened. Focus mode (the full-screen Pomodoro view) shares this same
-// underlying timer state; it's a presentation, not a separate clock.
-function unbilledMinutes(j) {
-  return (j.timeEntries || []).filter(e => !e.invoiced).reduce((s, e) => s + (Number(e.minutes) || 0), 0);
-}
-function fmtHM(totalMinutes) {
-  const h = Math.floor(totalMinutes / 60), m = Math.round(totalMinutes % 60);
-  return `${h}:${String(m).padStart(2, '0')}`;
-}
-let _jobTimerTickHandle = null;
-function renderJobTimer(jobId) {
-  const wrap = document.getElementById('job-timer-body');
-  if (!wrap) return;
-  const j = jobs.find(x => x.id === jobId);
-  if (!j) return;
-  clearInterval(_jobTimerTickHandle);
-  const running = !!j.timerStartedAt;
-  const unbilled = unbilledMinutes(j);
-  const entries = j.timeEntries || [];
-
-  const liveRow = () => {
-    const el = document.getElementById('job-timer-live');
-    if (el && j.timerStartedAt) {
-      const mins = (Date.now() - new Date(j.timerStartedAt).getTime()) / 60000;
-      el.textContent = fmtHM(unbilled + mins);
-    }
-  };
-
-  wrap.innerHTML = `
-    <div class="pkg-status">
-      <div class="pkg-status-row"><span>${htmlEsc(t('unbilled_time'))}</span><span class="tnum" id="job-timer-live">${fmt(unbilled, 2)}</span></div>
-    </div>
-    <div class="form-row" style="margin-top:10px">
-      <button type="button" class="btn-submit" style="flex:1" onclick="${running ? `stopJobTimer(${jobId})` : `startJobTimer(${jobId})`}">${htmlEsc(running ? t('stop_timer') : t('start_timer'))}</button>
-      ${running ? `<button type="button" class="qc-btn" style="width:auto;padding:0 14px" onclick="openFocusMode(${jobId})">${htmlEsc(t('focus_mode_btn'))}</button>` : ''}
-    </div>
-    ${unbilled > 0 ? `<button type="button" class="btn-submit" style="margin-top:8px;background:var(--card);color:var(--brand);border:1.5px solid var(--border)" onclick="convertUnbilledToInvoice(${jobId})">${htmlEsc(t('add_unbilled_to_invoice'))}</button>` : ''}
-    ${entries.length ? `<div class="list-card" style="margin-top:10px">${entries.slice().reverse().map(e => `
-      <div class="list-row" style="cursor:default">
-        <div class="list-main"><div class="list-title">${fmt((e.minutes||0)/60, 2)} h</div>
-        <div class="list-sub">${htmlEsc(fmtDate((e.endedAt||'').slice(0,10)))}${e.invoiced ? ' · ' + htmlEsc(t('time_invoiced_label')) : ''}</div></div>
-      </div>`).join('')}</div>` : ''}
-  `;
-  if (running) {
-    liveRow();
-    _jobTimerTickHandle = setInterval(liveRow, 1000);
-  }
-  updateJobDrillSummaries(jobId);
-}
-async function startJobTimer(jobId) {
-  const j = jobs.find(x => x.id === jobId);
-  if (!j || j.timerStartedAt) return;
-  j.timerStartedAt = new Date().toISOString();
-  await dbPut('jobs', j);
-  mirrorJob(j);
-  renderJobTracking(jobId);
-}
-window.startJobTimer = startJobTimer;
-async function stopJobTimer(jobId) {
-  const j = jobs.find(x => x.id === jobId);
-  if (!j || !j.timerStartedAt) return;
-  const minutes = (Date.now() - new Date(j.timerStartedAt).getTime()) / 60000;
-  j.timeEntries = j.timeEntries || [];
-  if (minutes >= 1) j.timeEntries.push({ id: cuid(), minutes, startedAt: j.timerStartedAt, endedAt: new Date().toISOString(), invoiced: false });
-  j.timerStartedAt = null;
-  await dbPut('jobs', j);
-  mirrorJob(j);
-  renderJobTracking(jobId);
-}
-window.stopJobTimer = stopJobTimer;
-function convertUnbilledToInvoice(jobId) {
-  const j = jobs.find(x => x.id === jobId);
-  if (!j) return;
-  const minutes = unbilledMinutes(j);
-  if (minutes <= 0) return;
-  const client = customers.find(c => c.id === j.clientId);
-  const svc = services.find(s => s.id === j.serviceId);
-  const rate = (svc && Number(svc.rate)) || 0;
-  const hours = minutes / 60;
-  if (typeof openInvoiceForm !== 'function') return;
-  // Snapshot exactly which entries are unbilled right now — marked invoiced
-  // only once the invoice is actually saved (onUnbilledTimeInvoiceCreated
-  // below), not a new entry that might get logged while the form is still open.
-  const entryIds = (j.timeEntries || []).filter(e => !e.invoiced).map(e => e.id);
-  openInvoiceForm(null, {
-    clientId: j.clientId,
-    clientName: (client && client.name) || j.client || '',
-    lineItems: [{ description: 'Unbilled time', qty: Math.round(hours * 100) / 100, unitPrice: rate }],
-    linkMeta: { type: 'unbilled', jobId, timeEntryIds: entryIds },
-  });
-}
-window.convertUnbilledToInvoice = convertUnbilledToInvoice;
-
-// Called by invoices.js only once an unbilled-time invoice is actually saved
-// (never on cancel) — marks exactly the entries that were unbilled at
-// draft-time, not whatever happens to be unbilled by the time save occurs.
-// Same non-stage-advancing treatment as onMilestoneInvoiceCreated above.
-window.onUnbilledTimeInvoiceCreated = async function (invoiceId, jobId, timeEntryIds) {
-  const j = jobs.find(x => x.id === jobId);
-  if (!j || !j.timeEntries) return;
-  const ids = new Set(timeEntryIds || []);
-  j.timeEntries.forEach(e => { if (ids.has(e.id)) { e.invoiced = true; e.invoiceId = invoiceId; } });
-  j.updatedAt = nowISO();
-  await dbPut('jobs', j);
-  mirrorJob(j);
-  renderJobTracking(jobId);
-};
-
-// Focus mode — full-screen Pomodoro view over whichever job's timer is
-// running. Ring is 25:00 counting down purely for pacing; hitting 0 just
-// wraps back to 25:00 rather than doing anything to the real timer.
-const FOCUS_DURATION_SEC = 25 * 60;
-let _focusJobId = null, _focusTickHandle = null, _focusPaused = false, _focusPauseStartedAt = null, _focusRingStartedAt = null;
-function openFocusMode(jobId) {
-  _focusJobId = jobId;
-  _focusPaused = false;
-  _focusRingStartedAt = Date.now();
-  document.getElementById('focus-overlay').classList.add('open');
-  document.getElementById('focus-pause-btn').textContent = t('focus_pause');
-  _focusTickHandle = setInterval(focusTick, 250);
-  focusTick();
-}
-window.openFocusMode = openFocusMode;
-function focusTick() {
-  const j = jobs.find(x => x.id === _focusJobId);
-  if (!j || !j.timerStartedAt) { closeFocusMode(); return; }
-  if (!_focusPaused) {
-    const ringElapsed = Math.floor((Date.now() - _focusRingStartedAt) / 1000) % FOCUS_DURATION_SEC;
-    const remaining = FOCUS_DURATION_SEC - ringElapsed;
-    document.getElementById('focus-ring-time').textContent = fmtMinSec(remaining);
-    const pct = Math.round((1 - remaining / FOCUS_DURATION_SEC) * 360);
-    document.getElementById('focus-ring').style.background = `conic-gradient(var(--marigold) ${pct}deg, color-mix(in srgb, var(--marigold) 18%, transparent) 0)`;
-  }
-  const unbilled = unbilledMinutes(j);
-  const liveMin = (Date.now() - new Date(j.timerStartedAt).getTime()) / 60000;
-  document.getElementById('focus-billable-time').textContent = fmtHM(unbilled + liveMin);
-}
-function fmtMinSec(totalSeconds) {
-  const m = Math.floor(totalSeconds / 60), s = totalSeconds % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-function toggleFocusPause() {
-  _focusPaused = !_focusPaused;
-  document.getElementById('focus-pause-btn').textContent = _focusPaused ? t('focus_resume') : t('focus_pause');
-  if (!_focusPaused) _focusRingStartedAt = Date.now(); // resume ring pacing from here, not where it left off
-}
-window.toggleFocusPause = toggleFocusPause;
-function closeFocusMode() {
-  clearInterval(_focusTickHandle);
-  document.getElementById('focus-overlay').classList.remove('open');
-  if (_focusJobId != null) renderJobTracking(_focusJobId);
-  _focusJobId = null;
-}
-window.closeFocusMode = closeFocusMode;
-function stopFocusMode() {
-  const jobId = _focusJobId;
-  closeFocusMode();
-  if (jobId != null) stopJobTimer(jobId);
-}
-window.stopFocusMode = stopFocusMode;
+// TSK-023: Time tracking (the per-job timer, unbilled-time-to-invoice
+// conversion, and Focus mode's full-screen Pomodoro view) is removed per
+// the owner — startJobTimer() had no entry point besides the removed
+// drill row's Start button, so no new timer could ever start; the whole
+// feature (including Focus mode, which only ever opened over a running
+// timer) goes with it.
 
 async function saveProgressEntry(clientId) {
   const date = document.getElementById('pl-date').value || todayISO();

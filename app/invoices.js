@@ -10,12 +10,11 @@
  *   - renderInvoices()          — fills #invoices-body
  *   - openInvoiceForm(fromJobId?, prefillQuote?) — create/edit invoice UI.
  *     prefillQuote (from docgen.js's Quote → Invoice conversion, or app.js's
- *     milestone/unbilled-time draft flows) is {clientId, clientName,
- *     lineItems, linkMeta?} and takes priority over fromJobId for prefill.
- *     linkMeta, if present, is {type:'milestone', jobId, milestoneId} or
- *     {type:'unbilled', jobId, timeEntryIds} — on actual save (not cancel),
- *     app.js's window.onMilestoneInvoiceCreated/onUnbilledTimeInvoiceCreated
- *     is called to link the invoice back, WITHOUT touching Pipeline stage
+ *     milestone draft flow) is {clientId, clientName, lineItems, linkMeta?}
+ *     and takes priority over fromJobId for prefill. linkMeta, if present,
+ *     is {type:'milestone', jobId, milestoneId} — on actual save (not
+ *     cancel), app.js's window.onMilestoneInvoiceCreated is called to link
+ *     the invoice back, WITHOUT touching Pipeline stage
  *     (that's fromJobId + onEngagementInvoiceCreated's job, kept separate on
  *     purpose since a job can have several milestones before it's actually done).
  *
@@ -237,8 +236,8 @@
           unitPrice: n(j.amount),
         });
         // Pass M3-L2: engagement items carry serviceId directly (snapshotted
-        // when added — see app.js's addJobItem), so app.js's
-        // decrementStockForInvoicePaid can find them at paid time.
+        // at add time), so app.js's decrementStockForInvoicePaid can find
+        // them at paid time.
         (j.items || []).forEach(it => {
           lines.push({ description: it.name, qty: it.qty, unitPrice: it.unitPrice, serviceId: it.serviceId });
         });
@@ -596,14 +595,12 @@
         if (formFromJobId != null && typeof window.onEngagementInvoiceCreated === 'function') {
           try { window.onEngagementInvoiceCreated(newId, formFromJobId); } catch (e) { /* non-fatal */ }
         }
-        // Milestone/unbilled-time linking: separate from the above on purpose —
-        // neither should advance the Pipeline stage (see file header).
+        // Milestone linking: separate from the above on purpose — must not
+        // advance the Pipeline stage (see file header).
         if (formLinkMeta) {
           try {
             if (formLinkMeta.type === 'milestone' && typeof window.onMilestoneInvoiceCreated === 'function') {
               window.onMilestoneInvoiceCreated(newId, formLinkMeta.jobId, formLinkMeta.milestoneId);
-            } else if (formLinkMeta.type === 'unbilled' && typeof window.onUnbilledTimeInvoiceCreated === 'function') {
-              window.onUnbilledTimeInvoiceCreated(newId, formLinkMeta.jobId, formLinkMeta.timeEntryIds);
             }
           } catch (e) { /* non-fatal */ }
         }
