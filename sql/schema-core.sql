@@ -415,6 +415,13 @@ create index if not exists idx_packages_user on packages(user_cuid);
 
 alter table packages add column if not exists client_cuid text;
 
+-- TSK-024: the catalog service (if any) this package was purchased against
+-- — same ref-cuid pattern as client_id/client_cuid above. Nullable: a
+-- package created before this pass, or via the "+Add package" form with no
+-- service picked, simply has no linked service.
+alter table packages add column if not exists service_id text;
+alter table packages add column if not exists service_cuid text;
+
 create table if not exists progress_logs (
   cuid              text primary key,
   user_cuid         text not null references users(cuid) on delete cascade,

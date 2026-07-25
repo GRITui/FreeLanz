@@ -43,13 +43,23 @@ only for the dedicated "Try a demo" flow, which still needs it to choose
 which persona-flavored demo dataset to seed. The persona concept itself
 (businessType/unit-word labeling/i18n variants/client trackers/the
 Settings-side switcher) is untouched, exactly as scoped to onboarding-only
-removal. That closes out every backlog item except the one the owner
-explicitly told the squad to hold: TSK-023's Fee/Tip/Expense/Sessions
+removal. That closed out every numbered backlog item except the one the
+owner explicitly told the squad to hold: TSK-023's Fee/Tip/Expense/Sessions
 money fields, which need an answer on what replaces `job.netAmount` as
 the revenue computation before any building starts — see Cross-Squad
 Requests below. Also: the new `test` CI gate (deploy-vercel.yml, added
 this arc) had its first real production run and worked exactly as
 designed — see the correction below.
+
+After that, the owner raised a new item straight in chat (not a screenshot
+popup) and it's logged/shipped as **TSK-024**: package-usage deduction
+("17/20 left") lived on the client with no link back to which catalog
+Service it was actually for — a client holding two different services'
+packages at once could have the wrong one silently applied to a Task-flow
+booking. The owner's own mental model was concrete and unambiguous ("create
+a service with 10x usage at 5,500 THB — booking/delivering it should deduct
+from that"), so this was built directly rather than researched/triaged
+first. See the Recent Commits entry below for the full implementation.
 
 **Correction to this file's own prior record**: the 2026-07-22 entry below
 called check-scheduling.js's occasional "64 passed, 1 failed" a pre-
@@ -256,6 +266,31 @@ pass/fail count.
   suites, 0 failures. This was the last actionable backlog item — every
   TSK is now shipped except the money-field half of TSK-023, held on
   purpose pending an owner answer (see Cross-Squad Requests).
+* PR pending (commit 15f571c): **TSK-024** — raised directly in chat, not a
+  screenshot popup. `packages` gained a `serviceId` field (previously
+  disconnected from the catalog Service entirely — selling a package meant
+  a manual "+Add package" step re-typing the same usageQty/rate numbers).
+  `activePackageFor(clientId, serviceId)` and `refreshJobPackageRow()` are
+  now scoped by (client, service), not just client — the real bug this
+  surfaced: a client holding two different services' packages at once
+  could have the wrong one silently applied to a Task-flow booking, since
+  the old lookup just picked "most recent package with any balance."
+  Booking a package-type service (`usageQty > 1`) for a client with no
+  active package for that exact service now auto-creates one from the
+  service's own usageQty/rate at save time (`saveJob()`) — selling a
+  package needs zero manual step beyond creating the Service once. The
+  Client detail package section and the Clients list badge both now tag
+  each package with its linked service's name (`packageDisplayName()`),
+  and a client can hold multiple independently-tracked packages (one per
+  service) at once instead of the old single-"most recent" summary hiding
+  the rest. Backend wired to match: `service_id`/`service_cuid` columns
+  (`sql/schema-core.sql`, `lib/schemaSql.js` regenerated), `api/packages.js`'s
+  FIELDS whitelist, and `dataClient.js`'s packages mirror, all following
+  the existing `client_id`/`client_cuid` ref-cuid pattern exactly. New
+  suite `check-service-packages.js` (25 assertions) covers auto-create,
+  per-service isolation, a non-package service never offering/creating
+  one, and the new tagging. Full battery clean: 15 Node + 34 Playwright
+  suites, 0 failures.
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
