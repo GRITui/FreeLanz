@@ -171,6 +171,11 @@ const errors = [];
   // nothing (nothing is listening for either), which is the inline
   // equivalent of the old modal's "locked door" invariant.
   const jobB = await mkJob('Gate svc');
+  // Task flow + Calendar merge: §3's switchScreen('book') left the pipeline
+  // screen's shared view-mode state on 'calendar' (same persistence §19
+  // below already relies on for 'timeline') — the gate card only renders on
+  // the board, so switch back explicitly before relying on it.
+  await page.evaluate(() => setPipelineView('board'));
   await page.evaluate(() => switchScreen('pipeline'));
   await page.waitForTimeout(300);
   const stageB0 = await job(jobB, 'jobStage(j)');

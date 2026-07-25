@@ -259,8 +259,12 @@ function waitForServer(url, timeoutMs) {
   assert(await bookingRow.locator('.list-pill-paid').count() === 1, '7: booking row uses the "Booked" (paid-tinted) pill');
   await bookingRow.click();
   await page.waitForTimeout(300);
-  const onBookScreen = await page.evaluate(() => document.getElementById('s-book').classList.contains('active'));
-  assert(onBookScreen, '7: tapping the next-booking row navigates to Calendar (#s-book)');
+  // Task flow + Calendar merge: #s-book is retired, Calendar is now a view
+  // mode on #s-pipeline (see plViewToggleHtml()/renderPipelineCalendarView()
+  // in app.js) — the next-booking row's switchScreen('book') call is kept
+  // as a working alias into it.
+  const onBookScreen = await page.evaluate(() => document.getElementById('s-pipeline').classList.contains('active') && window.__plView === 'calendar');
+  assert(onBookScreen, '7: tapping the next-booking row navigates to the pipeline\'s Calendar view');
   await goHome();
 
   // ═══ 8. Active pipeline job preview — general "Up next" rows, unchanged
