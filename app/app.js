@@ -1939,19 +1939,30 @@ async function enterApp() {
   set('set-goal-quarter', settings.goalTargets.quarter || '');
   set('set-goal-year', settings.goalTargets.year || '');
 
-  // Business type (persona) picker — reintroduced per the 2026 redesign
-  // handoff. Migrates existing installs to 'trainer' (this app's actual base
-  // case up to now, back when it was single-persona-only) so switching over
-  // changes nothing for anyone not deliberately picking a different type.
-  // Business type (persona) picker — reintroduced per the 2026 redesign
-  // handoff, now asked once at first run via a blocking modal instead of
-  // silently defaulting to 'trainer'. Existing installs already have
-  // `businessType` set from the earlier silent-default migration, so this
-  // only ever gates a genuinely new account/device — nobody already using
-  // the app sees it appear. enterApp() returns early here; finishAppBoot()
-  // (below) picks up once a choice is made, in showPersonaOnboard()'s
-  // choosePersonaOnboard() handler.
-  if (!settings.businessType) { showPersonaOnboard(); return; }
+  // TSK-021: the owner asked to stop asking a new account "what kind of
+  // business do you run?" at signup, and stop auto-seeding a starter
+  // Services catalog from that answer. A genuinely new account/device now
+  // defaults straight to 'custom' (BUSINESS_TYPES.custom.seedServices is
+  // already empty, so this seeds nothing) with zero interruption to boot —
+  // businessType()/unitWord()/persona-scoped i18n variants and the
+  // per-persona client tracker all stay fully intact, and still switchable
+  // later via Settings (onBusinessTypeChange() re-runs seedServicesIfEmpty()
+  // for whatever's newly chosen). choosePersonaOnboard() already does
+  // exactly what a manual pick would (set businessType/packageUnitLabel,
+  // the data-work-type attribute, the Settings selects) and calls
+  // finishAppBoot() itself, so reuse it here rather than duplicating that.
+  //
+  // The picker (#modal-persona-onboard) survives ONLY for "Try a demo"
+  // (login.html?demo=1 sets sidekick_start_demo before redirecting in as a
+  // guest) — a prospect choosing their persona there both sets businessType
+  // AND seeds a realistic, persona-flavored demo dataset (see
+  // choosePersonaOnboard() below), which a silent default would defeat the
+  // point of.
+  if (!settings.businessType) {
+    if (sessionStorage.getItem('sidekick_start_demo')) { showPersonaOnboard(); return; }
+    await choosePersonaOnboard('custom');
+    return;
+  }
   document.body.setAttribute('data-work-type', businessType());
   set('set-business-type', businessType());
   if (!settings.packageUnitLabel) await saveSetting('packageUnitLabel', PACKAGE_UNIT_DEFAULTS[businessType()] || 'Units');
@@ -1994,10 +2005,12 @@ async function finishAppBoot() {
   setInterval(checkAndFireNotifications, 60000);
 }
 
-// First-run persona picker (index.html's #modal-persona-onboard). Shown
-// exactly once, only when settings.businessType has never been set —
-// deliberately not dismissible (enterApp() already returned without calling
-// finishAppBoot() above, so nothing else runs until a choice is made here).
+// TSK-021: the persona picker (index.html's #modal-persona-onboard) is now
+// demo-mode only (see enterApp()'s call site) — every real account/guest
+// defaults straight to 'custom' instead. Kept deliberately not dismissible
+// for the demo case it still serves: enterApp() returns early without
+// calling finishAppBoot() above, so nothing else runs until a choice is
+// made here.
 function showPersonaOnboard() {
   const m = document.getElementById('modal-persona-onboard');
   if (m) m.classList.add('open');

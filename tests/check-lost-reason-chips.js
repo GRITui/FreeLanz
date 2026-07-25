@@ -29,8 +29,6 @@ const errors = [];
   await page.fill('#auth-pass', 'pass1234');
   await page.fill('#auth-confirm', 'pass1234');
   await page.click('#auth-submit');
-  await page.waitForSelector('#modal-persona-onboard.open', { timeout: 20000 });
-  await page.click('#modal-persona-onboard .list-row:nth-child(1)');
   await page.waitForTimeout(500);
   await page.evaluate(() => document.getElementById('cloud-backup-modal')?.remove());
   await page.evaluate(async () => { await onLangChange('en'); renderPipeline(); });

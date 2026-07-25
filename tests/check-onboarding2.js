@@ -16,17 +16,14 @@ const { chromium } = require('playwright');
   await page.waitForURL('**/index.html', { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(500);
 
-  // Choose "Other" (custom) persona this time
-  const rows = page.locator('#modal-persona-onboard .list-row');
-  await rows.nth(6).click(); // 7th row = custom/Other (kol added as the 6th row)
-  await page.waitForTimeout(500);
-
+  // TSK-021: no more persona picker to choose "Other" from — a fresh
+  // guest/account defaults straight to custom automatically now.
   const btVal = await page.evaluate(() => window.settings && window.settings.businessType);
   // settings isn't on window; read select instead after navigating to More
   await page.evaluate(() => window.switchScreen && window.switchScreen('more'));
   await page.waitForTimeout(300);
   const selectVal = await page.inputValue('#set-business-type');
-  assert(selectVal === 'custom', 'chosen "Other" should set businessType=custom, got: ' + selectVal);
+  assert(selectVal === 'custom', 'a fresh account should default to businessType=custom with no picker, got: ' + selectVal);
 
   // Toggle theme to dark via Settings, confirm it actually applies.
   // TSK-002/007: Theme is now a 3-button segmented control (#seg-theme-*),

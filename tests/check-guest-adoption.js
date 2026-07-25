@@ -23,8 +23,6 @@ const { chromium } = require('playwright');
   await page.waitForTimeout(300);
   await page.click('button.auth-btn.guest');
   await page.waitForURL('**/index.html', { timeout: 5000 }).catch(() => {});
-  await page.waitForSelector('#modal-persona-onboard.open', { timeout: 20000 });
-  await page.click('#modal-persona-onboard .list-row:nth-child(1)');
   await page.waitForTimeout(400);
 
   const seeded = await page.evaluate(async () => {
@@ -60,8 +58,6 @@ const { chromium } = require('playwright');
   await page.fill('#auth-confirm', 'testpassword123');
   await page.click('#auth-submit');
   await page.waitForURL('**/index.html', { timeout: 5000 }).catch(() => {});
-  await page.waitForSelector('#modal-persona-onboard.open', { timeout: 20000 });
-  await page.click('#modal-persona-onboard .list-row:nth-child(1)');
   await page.waitForTimeout(500);
   await page.evaluate(() => document.getElementById('cloud-backup-modal')?.remove());
 
@@ -119,8 +115,6 @@ const { chromium } = require('playwright');
   await page.fill('#auth-confirm', 'testpassword123');
   await page.click('#auth-submit');
   await page.waitForURL('**/index.html', { timeout: 5000 }).catch(() => {});
-  await page.waitForSelector('#modal-persona-onboard.open', { timeout: 20000 });
-  await page.click('#modal-persona-onboard .list-row:nth-child(1)');
   await page.waitForTimeout(500);
   await page.evaluate(() => document.getElementById('cloud-backup-modal')?.remove());
   await page.waitForTimeout(300);
