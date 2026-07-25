@@ -11,7 +11,12 @@ now also sources dated points from job.due (+ its linked booking), not just
 job.subTasks. TSK-018 part (2) — removing job.subTasks entirely — remains
 NEEDS_OWNER_REVIEW, unstarted, blocked on the owner's answer to the open
 design question (see Cross-Squad Requests). No other READY_FOR_PM items in
-the backlog — squad goes IDLE. Also: the new `test` CI gate (deploy-vercel.yml,
+the backlog. Latest work: the deploy pipeline itself changed on owner
+request — merge-to-main now auto-deploys to staging, production deploy is
+chat-approval-gated instead of a GitHub-click gate (see Recent Commits/PRs
+and Cross-Squad Requests — one manual owner step still needed to fully cut
+over). Squad goes IDLE once that PR merges and the owner removes the old
+required-reviewer rule. Also: the new `test` CI gate (deploy-vercel.yml,
 added this arc) had its first real production run and worked exactly as
 designed — see the correction below.
 
@@ -84,6 +89,25 @@ pass/fail count.
   `bash tests/run-all.sh` against the pre-installed sandbox Chromium):
   check-scheduling.js 66/66, all 33 Playwright suites + 15 Node harnesses
   0 failures. TSK-018 part (2) untouched, still blocked on the owner.
+* PR #73 (merged): logged TSK-018 part (1)'s real PR/commit numbers into
+  this file and backlog-inbox.md (PR #72's own record still said "pending"
+  — bookkeeping only, no app code).
+* PR pending (this push): **deploy pipeline restructure** — owner asked for
+  merge-to-main to auto-deploy to staging, with production deploy gated by
+  chat approval instead of the GitHub-side required-reviewer click. New
+  `deploy-staging` job (deploy-vercel.yml) runs on every push to main once
+  `test` passes — ungated, deploys to Vercel's preview alias (no new Vercel
+  project; owner chose reusing the existing preview environment over a
+  dedicated staging project). `deploy-production`'s trigger changed from
+  `push || workflow_dispatch` to `workflow_dispatch`-only, so it no longer
+  fires on a bare merge — it's dispatched on demand (the chat agent calls
+  `actions_run_trigger` / `run_workflow` with `ref: main` when the owner
+  says "deploy"/"approve" in chat), still `needs: test` so the promoted
+  commit gets a fresh full-battery run at dispatch time, not just whatever
+  passed at merge time. YAML-validated (`python3 -c "import yaml; ..."`,
+  no test-suite impact — workflow-file-only change). See the Cross-Squad
+  Requests entry below for the one manual step this still needs from the
+  owner (no tool can do it).
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
@@ -91,13 +115,25 @@ check-scheduling.js correction above for the one real regression this arc
 produced, caught by CI rather than a strike)
 
 ## Cross-Squad Requests
-* Owner: PR #67's new production deploy pipeline needs the `production`
-  environment's required-reviewer approval clicked (Actions tab → the
-  latest deploy-vercel.yml run → "Review deployments"). Each new push to
-  main queues its own approval request; an older still-queued one
-  typically gets superseded (concurrency group `cancel-in-progress`) once
-  a newer push's `test` job passes — approve whichever run is current once
-  its `test` job finishes, not an older one still sitting queued.
+* **Owner, action needed now**: the `production` GitHub Environment's
+  required-reviewer rule (Settings → Environments → production →
+  deployment protection rules) needs to be removed by hand — no tool in
+  this session's toolbox can read or write environment protection rules.
+  Until it's removed, ANY job referencing `environment: production` still
+  blocks on that manual click regardless of trigger type, so a chat-
+  approved `deploy-production` dispatch will still sit waiting on the same
+  GitHub-side approval it was supposed to replace. Once removed, chat
+  approval ("deploy" / "approve" in the chat that's driving this repo) is
+  the only production gate.
+* Note (superseded by the above, kept for history): PR #67's original
+  production deploy pipeline had `deploy-production` firing on every push
+  to main, gated by that same required-reviewer click. As of the pending
+  deploy-pipeline-restructure PR, `deploy-production` no longer fires on
+  push at all — only on a chat-triggered `workflow_dispatch`. The old
+  advice to "approve whichever run is current, not an older queued one"
+  (concurrency group `cancel-in-progress`) still applies if the reviewer
+  rule is left in place, but no longer needs to be a routine per-merge
+  action once it's removed.
 * Owner: TSK-018 (loop/backlog-inbox.md) still needs an answer to its open
   design question — does anything replace "+ Step with date" for freeform
   mid-engagement reminders once/if job.subTasks is removed?
