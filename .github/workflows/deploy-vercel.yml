@@ -4,22 +4,28 @@ name: Deploy to Vercel
 # Vercel's own GitHub-integration auto-deploy must be disabled in the Vercel
 # dashboard (Project Settings > Git) or every push double-deploys.
 #
-# workflow_dispatch lets a dashboard-only change (e.g. new env vars) force a
-# fresh prod build+deploy from the Actions tab, without a throwaway commit —
-# these are prebuilt deploys, so "Redeploy" in Vercel just re-serves the old
-# build and won't pick up new env vars.
-#
 # pull_request is scoped to `opened` only: the preview builds once when a PR
-# is first opened, not on every subsequent push to the branch. Production
-# still deploys on every push to main (i.e. every merge).
+# is first opened, not on every subsequent push to the branch.
 #
-# Staging gate (2026-07-23): `deploy-production` now `needs: test` — a full
-# tests/run-all.sh run against the exact commit being deployed, not just
-# whatever ran locally before merge. Deliberately scoped to production only;
-# `deploy-preview` stays ungated so PR previews build immediately. Combined
-# with the `production` environment's required-reviewer protection rule
-# (set in repo Settings > Environments, not expressible in this file) for a
-# second, human checkpoint after the automated one passes.
+# Staging/production split (2026-07-25): every push to main (i.e. every
+# merge) auto-deploys to STAGING once the `test` gate passes — no manual
+# step, matching "merged means it's on staging." Production no longer
+# deploys automatically on push: `deploy-production` is workflow_dispatch-
+# only, fired on demand when the owner approves in chat (the chat agent
+# calls the Actions API to dispatch it — see squad-handshake-engineer.md).
+# It still `needs: test`, so a chat-triggered deploy re-runs the full
+# battery against the exact commit being promoted, not just whatever ran on
+# the merge that put it on staging. workflow_dispatch is also the fallback
+# for a dashboard-only change (e.g. new env vars) that needs a fresh prod
+# build+deploy without a throwaway commit — these are prebuilt deploys, so
+# "Redeploy" in Vercel just re-serves the old build and won't pick up new
+# env vars.
+#
+# NOTE: the `production` environment's required-reviewer rule from the old
+# push-triggered flow (Settings > Environments > production) still applies
+# to any job referencing this environment regardless of trigger type — it
+# must be removed in the GitHub UI for chat approval to be the only gate;
+# not expressible in this file.
 
 on:
   push:
@@ -65,9 +71,31 @@ jobs:
       - name: Full regression battery
         run: bash tests/run-all.sh
 
+  deploy-staging:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy
+        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+
   deploy-production:
     needs: test
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: production
