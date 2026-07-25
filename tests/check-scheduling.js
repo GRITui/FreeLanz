@@ -197,12 +197,17 @@ const errors = [];
   const expectedDate7_B = await page.evaluate(() => addDaysISO(todayISO(), 7));
   assert(gate5Date === expectedDate7_B, '5: gate date input defaults to today+7 with zero typing, got ' + gate5Date);
 
-  // ═══ 6. Gate "Book & move" → job.due set, NOT a sub-task/booking ════════
-  // Documented engineering decision (see app.js's STAGE-GATE INLINE CARD
-  // comment): the inline gate writes job.due directly and never touches
-  // subTasks/bookings — that mechanism stays reserved for job-detail's own
-  // "+ Step with date" flow (exercised in §1-3/§11 above, untouched by this
-  // rewrite).
+  // ═══ 6. Gate "Book & move" → job.due set AND a linked booking (TSK-016) ═
+  // Updated engineering decision (see app.js's syncGateBookingForDue()):
+  // the inline gate writes job.due directly AND creates/links a real
+  // bookings-store row via job.dueBookingCuid — restoring what the old
+  // full-screen gate did, per the owner's Option B call after PR #65. It
+  // still never touches job.subTasks — that mechanism stays reserved for
+  // job-detail's own "+ Step with date" flow (exercised in §1-3/§11 above,
+  // untouched by either rewrite). Full create/move/skip/cancel coverage
+  // for the linked booking lives in tests/check-gate-booking.js; this
+  // assertion just guards that THIS gate (a basic stage-advance) is one of
+  // the paths that creates one.
   const bkCountBefore = await page.evaluate(() => dbAll('bookings').then(r => r.length));
   await page.fill('#gate-date-' + jobB, dPlus6);
   await page.click('.gate-btn-primary');
@@ -213,14 +218,15 @@ const errors = [];
       bkCount: (await dbAll('bookings')).length };
   }, jobB);
   assert(dateRes.due === dPlus6, '6: "Book & move" wrote job.due to the chosen date, got ' + dateRes.due);
-  assert(dateRes.bkCount === bkCountBefore, '6: NO booking row created by the inline gate');
+  assert(dateRes.bkCount === bkCountBefore + 1, '6: exactly one linked booking row created by the inline gate, got ' + JSON.stringify(dateRes));
   assert(dateRes.pending == null && !dateRes.gateOpen, '6: gate resolved (flag cleared, gate card closed)');
 
   // ═══ 6b. Restore a "by" dated sub-task on jobB via the (unchanged) modal
   // add-mode — §13-15 below need a second dated-step job to exercise the
-  // timeline's bar/dot mix; the inline gate no longer creates one itself
-  // (see §6's comment), so this recreates that fixture explicitly through
-  // job-detail's own "+ Step with date" flow instead.
+  // timeline's bar/dot mix; the inline gate never creates a job.subTasks
+  // entry itself (only its own linked booking, per §6 above), so this
+  // recreates that fixture explicitly through job-detail's own
+  // "+ Step with date" flow instead.
   await page.evaluate(id => openApptModal({ mode: 'add', jobId: id }), jobB);
   await page.waitForSelector('#modal-appt', { timeout: 5000 });
   await page.click('#ap-type-by');
