@@ -9,8 +9,10 @@
 TSK-018 part (1) shipped (commit cf3eb73, PR #72 merged) — renderPipelineTimeline()
 now also sources dated points from job.due (+ its linked booking), not just
 job.subTasks. The deploy pipeline restructure also shipped (PR #74 merged)
-— merge-to-main auto-deploys to staging, production is chat-approval-gated
-(one manual owner step still open — see Cross-Squad Requests). Backlog is
+and is confirmed working end-to-end — merge-to-main auto-deploys to
+staging, and the first chat-triggered production deploy (workflow run
+30155369597) went straight through with no manual GitHub approval block,
+live on production as of 11:04 UTC. Backlog is
 now five items deep in NEEDS_OWNER_REVIEW, all blocked on the owner: TSK-018
 part (2) (remove job.subTasks), TSK-020 (remove the Tools grid — orphans 4
 screens as literally asked), TSK-021 (remove persona onboarding — persona is
@@ -111,7 +113,7 @@ pass/fail count.
   no test-suite impact — workflow-file-only change). See the Cross-Squad
   Requests entry below for the one manual step this still needs from the
   owner (no tool can do it).
-* PR pending (this push): logged **TSK-020** (remove the More screen's
+* PR #75 (see below): logged **TSK-020** (remove the More screen's
   "Tools" grid) and **TSK-021** (remove the persona onboarding picker +
   preset-service seeding) from an owner screenshot + two-line ask —
   bookkeeping only, no app code. Both marked NEEDS_OWNER_REVIEW rather than
@@ -124,7 +126,7 @@ pass/fail count.
   setup flow, not an isolated onboarding screen. Both need the owner to pick
   a scope (see backlog-inbox.md's researcher_notes for each) before
   Engineer-Squad estimates or starts either.
-* PR pending (this push, same as above): logged **TSK-022** (add a
+* PR #75 (open): logged **TSK-022** (add a
   Service/Product shortcut to the bottom nav — currently 2 taps deep at
   More ▸ Business & documents ▸ Services) and **TSK-023** (strip the
   Add-session job modal down to Date/Client/Service/Notes) from a second
@@ -141,7 +143,6 @@ pass/fail count.
   UI. TSK-022 is much smaller but still needs a mechanism choice (6th nav
   tab vs. replace an existing one vs. extend the FAB into a quick-add
   menu) — see backlog-inbox.md's researcher_notes for both.
-  Engineer-Squad estimates or starts either.
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
@@ -149,25 +150,23 @@ check-scheduling.js correction above for the one real regression this arc
 produced, caught by CI rather than a strike)
 
 ## Cross-Squad Requests
-* **Owner, action needed now**: the `production` GitHub Environment's
-  required-reviewer rule (Settings → Environments → production →
-  deployment protection rules) needs to be removed by hand — no tool in
-  this session's toolbox can read or write environment protection rules.
-  Until it's removed, ANY job referencing `environment: production` still
-  blocks on that manual click regardless of trigger type, so a chat-
-  approved `deploy-production` dispatch will still sit waiting on the same
-  GitHub-side approval it was supposed to replace. Once removed, chat
-  approval ("deploy" / "approve" in the chat that's driving this repo) is
-  the only production gate.
-* Note (superseded by the above, kept for history): PR #67's original
+* **Resolved**: the `production` GitHub Environment's required-reviewer
+  rule was flagged here as needing manual removal (no tool in this
+  session's toolbox can read/write environment protection rules). The
+  first chat-triggered `deploy-production` dispatch after PR #74 merged
+  (workflow run 30155369597, commit ccc2cee) ran straight through with no
+  approval block — `test` passed at 11:03:12, `deploy-production` started
+  immediately after and completed successfully at 11:04:14, actually
+  live on production. Whatever the owner did (removed the rule, or it
+  never actually applied the way the original PR #67 note assumed) it
+  worked — chat approval is confirmed to be the effective production gate
+  now. No outstanding owner action here.
+* Note (kept for history): PR #67's original
   production deploy pipeline had `deploy-production` firing on every push
-  to main, gated by that same required-reviewer click. As of the pending
-  deploy-pipeline-restructure PR, `deploy-production` no longer fires on
-  push at all — only on a chat-triggered `workflow_dispatch`. The old
-  advice to "approve whichever run is current, not an older queued one"
-  (concurrency group `cancel-in-progress`) still applies if the reviewer
-  rule is left in place, but no longer needs to be a routine per-merge
-  action once it's removed.
+  to main, gated by that same required-reviewer click. As of PR #74
+  (merged), `deploy-production` no longer fires on push at all — only on
+  a chat-triggered `workflow_dispatch`, confirmed working end-to-end (see
+  Resolved note above).
 * Owner: TSK-018 (loop/backlog-inbox.md) still needs an answer to its open
   design question — does anything replace "+ Step with date" for freeform
   mid-engagement reminders once/if job.subTasks is removed?
