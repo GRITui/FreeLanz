@@ -1200,7 +1200,7 @@ const I18N = {
     err_auth_name_required:'กรุณากรอกชื่อของคุณ',
     line_profile_title:'อีกนิดเดียว', line_profile_sub:'ใช้ชื่ออะไรดี?', btn_continue:'ดำเนินการต่อ',
     auth_hint:'สร้างบัญชีเพื่อบันทึกข้อมูลไว้ในเครื่องนี้<br>ทุกอย่างเก็บอยู่ในเครื่อง — ไม่มีคลาวด์ ไม่มีการติดตาม<br>โหมดผู้เยี่ยมชมใช้งานได้ชั่วคราวเท่านั้น',
-    tagline:'จองคิวได้ ได้งาน ได้รับเงิน',
+    tagline:'รับจอง, รับงาน, รับเงิน',
     // nav
     nav_home:'หน้าแรก', nav_docs:'เอกสาร', nav_invoices:'ใบแจ้งหนี้', nav_docs_qa:'เอกสาร', nav_pipeline:'แผนงาน', nav_book:'ปฏิทิน', nav_more:'เพิ่มเติม',
     pipeline_title:'แผนงาน', workflow_title:'ลำดับขั้นตอน', pipeline_glance_title:'ภาพรวมแผนงาน',
@@ -1871,10 +1871,11 @@ async function enterApp() {
   const sAll = await dbAll('settings');
   const prefix = isGuest ? 'guest:' : (currentUser.id + ':');
   sAll.forEach(s => { if (s.key.startsWith(prefix)) settings[s.key.slice(prefix.length)] = s.value; });
-  // Pipeline view mode (board | timeline) — persisted like bookings' calViewMode,
-  // mirrored in-memory so renderPipeline (sync) never awaits IDB. Must be set
-  // before the reload() below, which triggers the first renderPipeline().
-  window.__plView = settings.plViewMode === 'timeline' ? 'timeline' : 'board';
+  // Pipeline view mode (board | timeline | calendar) — persisted like
+  // bookings' calViewMode, mirrored in-memory so renderPipeline (sync)
+  // never awaits IDB. Must be set before the reload() below, which
+  // triggers the first renderPipeline().
+  window.__plView = (settings.plViewMode === 'timeline' || settings.plViewMode === 'calendar') ? settings.plViewMode : 'board';
 
   // One-time per-account remap of any job still holding a pre-TSK-014 stage
   // value — MUST run before reload() populates the in-memory `jobs` array
@@ -4539,6 +4540,7 @@ function renderPipeline() {
   // the read-only timeline. Branching here (rather than in switchScreen) means
   // every existing renderPipeline() call site refreshes whichever view is on.
   if (window.__plView === 'timeline') return renderPipelineTimeline();
+  if (window.__plView === 'calendar') return renderPipelineCalendarView();
   const order = getStageOrder();
   const groups = {}; order.forEach(s => groups[s] = []);
   // Group each session under its own stage NAME. A session whose stage isn't
@@ -4609,7 +4611,7 @@ window.renderPipeline = renderPipeline;
 window.__plView = 'board';   // in-memory mirror of the plViewMode setting; enterApp loads the persisted value
 
 function setPipelineView(mode) {
-  mode = mode === 'timeline' ? 'timeline' : 'board';
+  mode = (mode === 'timeline' || mode === 'calendar') ? mode : 'board';
   if (window.__plView === mode) return;
   window.__plView = mode;
   // Fire-and-forget persist (same setting store as calViewMode) — the render
@@ -4619,14 +4621,16 @@ function setPipelineView(mode) {
 }
 window.setPipelineView = setPipelineView;
 
-// Board/Timeline segmented toggle shared by both views (reuses the
-// appointment modal's .ap-seg pill styling rather than inventing a third
-// segmented-control look).
+// Board/Timeline/Calendar segmented toggle shared by all three views
+// (reuses the appointment modal's .ap-seg pill styling rather than
+// inventing a fourth segmented-control look). Task flow + Calendar merge:
+// Calendar reuses book_title's existing 'Calendar'/'ปฏิทิน' string rather
+// than a new key, since it's the same screen's old <h1>.
 function plViewToggleHtml() {
-  const tl = window.__plView === 'timeline';
-  return `<div class="ap-seg pl-view-seg" role="tablist" aria-label="${attrEsc(t('pl_view_board') + ' / ' + t('pl_view_timeline'))}">
-    <button type="button" role="tab" aria-selected="${!tl}" class="${tl ? '' : 'seg-active'}" onclick="setPipelineView('board')">${htmlEsc(t('pl_view_board'))}</button>
-    <button type="button" role="tab" aria-selected="${tl}" class="${tl ? 'seg-active' : ''}" onclick="setPipelineView('timeline')">${htmlEsc(t('pl_view_timeline'))}</button>
+  const mode = window.__plView;
+  const seg = (val, key) => `<button type="button" role="tab" aria-selected="${mode === val}" class="${mode === val ? 'seg-active' : ''}" onclick="setPipelineView('${val}')">${htmlEsc(t(key))}</button>`;
+  return `<div class="ap-seg pl-view-seg" role="tablist" aria-label="${attrEsc([t('pl_view_board'), t('pl_view_timeline'), t('book_title')].join(' / '))}">
+    ${seg('board', 'pl_view_board')}${seg('timeline', 'pl_view_timeline')}${seg('calendar', 'book_title')}
   </div>`;
 }
 
@@ -4772,6 +4776,23 @@ function renderPipelineTimeline() {
   }
 }
 window.renderPipelineTimeline = renderPipelineTimeline;
+
+// ─── PIPELINE CALENDAR (third view mode: task-flow + calendar merge) ────
+// The Calendar nav screen (#s-book) is retired — its content is now a
+// third view on this same screen, alongside Board/Timeline, reachable via
+// the same segmented toggle. bookings.js's renderBookings() only ever
+// targets #book-body by id (see that file's header) and owns everything
+// inside it, so it doesn't matter that this div is torn down and rebuilt
+// fresh on every switch into this view rather than living in static
+// index.html markup — same "each view owns #pipeline-body wholesale"
+// pattern renderPipelineTimeline() above already uses.
+function renderPipelineCalendarView() {
+  const el = document.getElementById('pipeline-body');
+  if (!el) return;
+  el.innerHTML = `${plViewToggleHtml()}<div id="book-body"></div>`;
+  if (typeof renderBookings === 'function') renderBookings();
+}
+window.renderPipelineCalendarView = renderPipelineCalendarView;
 
 // TSK-011/012 card badges: an italic quoted note (Redo/Postpone/Cancel's
 // free-text reason), and a small "Attempt N" pill once Redo has run at
@@ -8298,6 +8319,12 @@ function switchScreen(name) {
   // break: it opens Docs and expands+scrolls to the calculator instead of
   // landing on a screen that no longer exists.
   if (name === 'tax') { openDocsTaxCalculator(); return; }
+  // Task flow + Calendar merge: #s-book is retired — Calendar is now a
+  // third view on the pipeline screen (see plViewToggleHtml()/
+  // renderPipelineCalendarView()). Kept as an alias (same pattern as 'tax'
+  // above) so every existing switchScreen('book') caller (Home's
+  // next-booking row, tests) keeps working unchanged.
+  if (name === 'book') { switchScreen('pipeline'); setPipelineView('calendar'); return; }
   logEvent('screen_view:' + name);
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => { b.classList.remove('active'); b.removeAttribute('aria-current'); });
@@ -8358,8 +8385,9 @@ function switchScreen(name) {
   // M4 Pass P4: the annual tax roll-up is a second block inside the same
   // details area — render it alongside the calculator above.
   if (name === 'docs' && typeof renderTaxRollup === 'function') renderTaxRollup();
-  // M3 modules (bookings.js / followups.js / portfolio.js).
-  if (name === 'book' && typeof renderBookings === 'function') renderBookings();
+  // M3 modules (followups.js / portfolio.js). bookings.js's renderBookings()
+  // is no longer called from here — 'book' is aliased above into the
+  // pipeline's Calendar view, which calls it itself.
   if (name === 'followups' && typeof renderFollowups === 'function') renderFollowups();
   if (name === 'portfolio' && typeof renderPortfolio === 'function') renderPortfolio();
   // M5 module (research.js).

@@ -564,6 +564,11 @@
       el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${esc(t('bookings_load_error'))}</p></div>`;
       return;
     }
+    // Task flow + Calendar merge: #book-body now lives inside #pipeline-body,
+    // which a sibling Board/Timeline render can wholesale-replace while this
+    // await was in flight — re-check el is still the live container before
+    // touching it, or a newer render already superseded this stale one.
+    if (document.getElementById('book-body') !== el) return;
     const prevAria = desktop ? t('cal_prev_week_aria') : t('cal_prev_3day_aria');
     const nextAria = desktop ? t('cal_next_week_aria') : t('cal_next_3day_aria');
     const weekNav = `<div class="cal-topnav">
@@ -617,6 +622,9 @@
       el.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><p>${esc(t('bookings_load_error'))}</p></div>`;
       return;
     }
+    // Task flow + Calendar merge: same stale-container guard as
+    // renderWeekView() above — see its comment for why this is needed now.
+    if (document.getElementById('book-body') !== el) return;
 
     const monthNav = `<div class="cal-topnav">
         <button type="button" id="cal-prev" class="cal-navbtn" aria-label="${aesc(t('cal_prev_month_aria'))}">‹</button>

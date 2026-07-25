@@ -340,7 +340,6 @@ details.job-drill:last-of-type{margin-bottom:0;}
 @media (prefers-reduced-motion:reduce){.kb-card.kb-enter{animation:none;}}
 @media (min-width:900px){
   #s-pipeline .content{max-width:1000px;}
-  #s-book .content{max-width:1000px;}
   .cal-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:24px;align-items:start;}
   .cal-right{position:sticky;top:20px;}
 }
