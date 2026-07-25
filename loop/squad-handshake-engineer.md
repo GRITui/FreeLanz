@@ -11,18 +11,22 @@ now also sources dated points from job.due (+ its linked booking), not just
 job.subTasks. The deploy pipeline restructure also shipped (PR #74 merged)
 and is confirmed working end-to-end — merge-to-main auto-deploys to
 staging, and the first chat-triggered production deploy (workflow run
-30155369597) went straight through with no manual GitHub approval block,
-live on production as of 11:04 UTC. Backlog is
-now five items deep in NEEDS_OWNER_REVIEW, all blocked on the owner: TSK-018
-part (2) (remove job.subTasks), TSK-020 (remove the Tools grid — orphans 4
-screens as literally asked), TSK-021 (remove persona onboarding — persona is
-cross-cutting, not isolated), TSK-022 (nav-bar Service/Product shortcut —
-needs a mechanism choice), TSK-023 (strip the job modal to Date/Client/
-Service/Notes — the highest-risk one, guts the app's core revenue field
-unless the owner specifies a replacement). No READY_FOR_PM items — squad
-stays IDLE until at least one of these gets an owner answer. Also: the new
-`test` CI gate (deploy-vercel.yml, added this arc) had its first real
-production run and worked exactly as
+30155369597) went straight through with no manual GitHub approval block.
+TSK-022 also shipped (commit 3ff5e45, PR #75 merged) along with two
+owner-driven follow-ups delivered in the same PR: the Task flow + Calendar
+screens are now merged into one (Board/Timeline/Calendar toggle), and the
+Thai tagline was updated. A second chat-triggered production deploy is
+in flight for that commit (workflow run 30157135649) as of this write.
+Remaining backlog: TSK-018 part (2) (remove job.subTasks), TSK-020 (remove
+the Tools grid — orphans 4 screens as literally asked), TSK-021 (remove
+persona onboarding — persona is cross-cutting, not isolated), TSK-023
+(strip the job modal to Date/Client/Service/Notes — the highest-risk one,
+guts the app's core revenue field unless the owner specifies a
+replacement) — all still NEEDS_OWNER_REVIEW, held pending explicit owner
+direction rather than built on recommended-default guesses, since the
+owner has been giving precise instructions directly rather than picking
+from offered options. Also: the new `test` CI gate (deploy-vercel.yml,
+added this arc) had its first real production run and worked exactly as
 designed — see the correction below.
 
 **Correction to this file's own prior record**: the 2026-07-22 entry below
@@ -143,6 +147,30 @@ pass/fail count.
   UI. TSK-022 is much smaller but still needs a mechanism choice (6th nav
   tab vs. replace an existing one vs. extend the FAB into a quick-add
   menu) — see backlog-inbox.md's researcher_notes for both.
+* PR #75 (merged, commit 3ff5e45): **TSK-022** built as the recommended 6th
+  persistent nav tab (`#nav-services`, links to the existing Services/
+  Products catalog screen). Landed alongside two owner-driven follow-ups
+  in the same PR: **Task flow + Calendar merge** (the `#s-book` screen is
+  retired — Calendar is now a third view mode on the pipeline screen's
+  existing Board/Timeline segmented toggle from TSK-018, nets the nav bar
+  back to a clean 5 tabs) and a **Thai tagline update** ("รับจอง, รับงาน,
+  รับเงิน"). Found + fixed two real bugs surfaced by the merge: (1)
+  `window.__plView`'s boot restore only ever checked for `'timeline'`,
+  silently dropping a saved `'calendar'` preference back to `'board'` on
+  reload; (2) `renderWeekView()`/`renderMonthView()` in bookings.js did
+  async work against a captured `#book-body` element before touching the
+  DOM — now that the container can be wholesale-replaced by a sibling
+  Board/Timeline render mid-await (impossible before, when it lived in its
+  own static screen), a stale continuation could throw wiring listeners
+  onto elements no longer in the live document. Both render functions now
+  re-check the container is still current before proceeding. `switchScreen
+  ('book')` kept as a working alias (same pattern as the existing `'tax'`
+  alias) so every existing caller (Home's next-booking row, 6 test files)
+  needed zero changes beyond one `#s-book`-specific assertion in
+  check-home-today-v2.js and one explicit view-mode reset in
+  check-scheduling.js (mirroring its own pre-existing §19 pattern for
+  `'timeline'`). Full battery clean: 15 Node harnesses + 33 Playwright
+  suites, 0 failures, check-scheduling.js 66/66, 0 console errors.
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
