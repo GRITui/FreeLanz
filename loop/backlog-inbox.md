@@ -243,7 +243,7 @@ Current behavior (confirmed in code): the unified Services/Products catalog scre
 <task_item>
   <id>TSK-023</id>
   <source>OWNER_POPUP</source>
-  <status>NEEDS_OWNER_REVIEW</status>
+  <status>READY_FOR_PM</status><!-- PARTIALLY SHIPPED by Engineer-Squad 2026-07-25: commit a6db194, PR #78 (open). Built the safe subset the owner confirmed: removed the Quick log/Full details toggle (every field always shown now), "Items on this engagement" (addJobItem/removeJobItem had no other entry point -- whole feature retired, not just UI), and "Time tracking" + Focus mode (startJobTimer had no other entry point -- same). Fee/Tip/Expense/Sessions still HELD (unchanged), pending the revenue-model replacement discussed below -- do not build without an explicit owner answer on what computes revenue instead. "Options compared" and "Plan & payments" also explicitly KEPT (not removed as originally asked) -- owner confirmed this once told those two now host Book viewing (TSK-018 part 2's bookViewingForOption) and milestone gating, which removing them would have undone. Full battery clean: 15 Node + 33 Playwright suites, 0 failures. See squad-handshake-engineer.md. -->
   <priority>MEDIUM</priority>
   <title>Strip the Add-session job modal down to Date/Client/Service/Notes</title>
   <description>Owner asked (screenshot: the "Add session" job modal, Full details mode) to remove: Fee, Tip, Expense, Sessions, the Quick log/Full details toggle, "อสังหาฯ ที่ดู" (the realestate-persona label for the "Options compared" drill row), "Items on this engagement", Time tracking, and "Plan &amp; payments".

@@ -1,8 +1,8 @@
 <squad_metadata>
   <squad_name>Engineer-Squad</squad_name>
-  <current_status>IDLE</current_status>
-  <active_task_id>none</active_task_id>
-  <sprint_completion_percentage>100</sprint_completion_percentage>
+  <current_status>EXECUTING</current_status>
+  <active_task_id>TSK-020</active_task_id>
+  <sprint_completion_percentage>90</sprint_completion_percentage>
 </squad_metadata>
 
 ## Current Focus
@@ -23,18 +23,19 @@ way — just remove it"): the standalone dated sub-task list is gone, with
 two non-obvious dependencies (Options compared's 📅 Book viewing, milestone
 gating) found and confirmed with the owner before building around them —
 see backlog-inbox.md's TSK-018 entry for the full writeup.
-Remaining backlog: TSK-020 (remove the Tools grid — orphans 4 screens as
-literally asked), TSK-021 (remove persona onboarding — persona is
-cross-cutting, not isolated), TSK-023 (strip the job modal to
-Date/Client/Service/Notes — the highest-risk one, guts the app's core
-revenue field unless the owner specifies a replacement) — all still
-NEEDS_OWNER_REVIEW. The owner asked for and received the squad's direct
-recommendation on all three (relocate-not-delete for TSK-020,
-onboarding-only for TSK-021, split-and-hold-the-money-fields for TSK-023)
-but hasn't yet said "go" on any of them — held pending that, rather than
-built on the recommendations unconfirmed. Also: the new `test` CI gate
-(deploy-vercel.yml, added this arc) had its first real production run and
-worked exactly as designed — see the correction below.
+The owner then said "complete every backlog" — explicit go-ahead to build
+TSK-020/021/023 on the squad's own recommendations rather than wait for a
+task-by-task confirmation. TSK-023 shipped first (commit a6db194, PR #78
+open): the Quick log/Full details toggle, "Items on this engagement", and
+"Time tracking" (+ Focus mode) are removed — Fee/Tip/Expense/Sessions stay
+untouched (still held, no revenue-model replacement given). One real
+discovery mid-build: the owner's original ask also named "Options compared"
+and "Plan & payments" for removal, but those now host TSK-018 part 2's Book
+viewing + milestone gating — flagged before touching either, owner
+confirmed keeping both. TSK-020 (Tools grid) and TSK-021 (persona
+onboarding) are next up. Also: the new `test` CI gate (deploy-vercel.yml,
+added this arc) had its first real production run and worked exactly as
+designed — see the correction below.
 
 **Correction to this file's own prior record**: the 2026-07-22 entry below
 called check-scheduling.js's occasional "64 passed, 1 failed" a pre-
@@ -192,6 +193,25 @@ pass/fail count.
   check-scheduling.js) — obsolete UI-specific assertions deleted outright,
   no successor for a freeform undated checklist item or step repeat.
   Full battery clean: 15 Node + 33 Playwright suites, 0 failures.
+* PR #78 (open, commit a6db194): **TSK-023** (partial — Fee/Tip/Expense/
+  Sessions held) — removed the Quick log/Full details toggle
+  (`job-mode-seg`/`setJobModalMode()`/`applyJobModalMode()`, every field
+  always shown now), "Items on this engagement" (`addJobItem`/
+  `removeJobItem` had no other entry point — whole feature retired, not
+  just UI, existing jobs' items still flow into quotes/invoices as before),
+  and "Time tracking" + Focus mode (`startJobTimer` had no other entry
+  point — same). Found mid-build that the owner's original ask also named
+  "Options compared"/"Plan & payments" for removal — those now host TSK-018
+  part 2's Book viewing + milestone gating, so removing them would have
+  undone that work; flagged before touching either, owner confirmed
+  keeping both. `invoices.js`'s dead `'unbilled'` linkMeta branch and
+  orphaned Focus-mode CSS removed alongside their only callers.
+  check-job-modal-v2.js (the old TSK-008 toggle suite) rewritten for the
+  new always-visible behavior; check-items.js's UI-driven sections switched
+  to direct DB seeding (its downstream sections were already
+  seed-independent and unaffected); check-merges.js/check-options-lost.js
+  needed only their `setJobModalMode('full')` setup calls dropped. Full
+  battery clean: 15 Node + 33 Playwright suites, 0 failures.
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
