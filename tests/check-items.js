@@ -1,9 +1,16 @@
-/* Acceptance suite for "Pass M3-L2": products/extra services attach to a
- * pipeline ENGAGEMENT while the deal is still forming (the job edit modal's
- * new Items section), then flow automatically into the quote and the
- * invoice as linked line items — so stock decrement and totals work
+/* Acceptance suite for "Pass M3-L2": products/extra services attached to a
+ * pipeline ENGAGEMENT (job.items[]) flow automatically into the quote and
+ * the invoice as linked line items — so stock decrement and totals work
  * end-to-end without retyping. Builds on Pass M3-L1's unified catalog
  * (tests/check-catalog.js). Harness pattern copied from that file.
+ *
+ * TSK-023 removed the "Items on this engagement" job-modal UI (addJobItem/
+ * removeJobItem had no other entry point, so job.items[] can no longer gain
+ * new entries) -- items are seeded directly via IndexedDB below instead of
+ * through the now-removed UI. Everything downstream of creation (catalog-
+ * edit isolation, the pipeline card chip, quote/invoice prefill, stock
+ * decrement) is unchanged and still real product behavior for any job that
+ * already carries items.
  *
  * Run: NODE_PATH=/opt/node22/lib/node_modules node tests/check-items.js
  * Expects http://localhost:8983 serving ../app.
@@ -122,42 +129,25 @@ const errors = [];
   const proteinId = await mkProduct();
   const consultId = await mkService();
 
-  // ═══ 1. Add items via the real Items UI on the job edit modal, then save ═
+  // ═══ 1. job.items[] shape — seeded directly (TSK-023 removed the UI) ════
   const jobA = await mkJob('inquiry', { client: 'Items Client A' });
-  await page.evaluate(id => openEditJob(id), jobA);
-  await page.waitForTimeout(300);
-  assert(await page.locator('#job-items-body').count() === 1, '1: items section present in edit modal');
-  assert((await page.locator('#job-items-body .pkg-status').textContent()).length > 0, '1: empty state shown with no items');
-
-  // TSK-008: Items now lives behind Full details + a collapsed drill row —
-  // switch mode and pop the row open before interacting with #job-item-svc.
-  await page.evaluate(() => { setJobModalMode('full'); document.getElementById('job-items-details').open = true; });
-  await page.selectOption('#job-item-svc', String(proteinId));
-  await page.fill('#job-item-qty', '2');
-  await page.click('#job-items-body button[onclick*="addJobItem"]');
-  await page.waitForTimeout(200);
-  await page.selectOption('#job-item-svc', String(consultId));
-  // qty input resets to its default (1) on re-render — leave as-is.
-  await page.click('#job-items-body button[onclick*="addJobItem"]');
-  await page.waitForTimeout(200);
-
-  const itemRows = await page.locator('#job-items-body .list-row').count();
-  assert(itemRows === 2, '1: two item rows rendered, got ' + itemRows);
-  const itemsHtml = await page.evaluate(() => document.getElementById('job-items-body').innerHTML);
-  assert(itemsHtml.includes('Protein Pack') && itemsHtml.includes('2 ×') && itemsHtml.includes('฿300'),
-    '1: product row shows name + "2 ×" + line total ฿300, got snippet: ' + itemsHtml.slice(0, 300));
-  assert(itemsHtml.includes('Nutrition Consult') && itemsHtml.includes('1 ×') && itemsHtml.includes('฿300'),
-    '1: service row shows name + "1 ×" + line total ฿300');
-
-  await page.evaluate(() => saveJob());
-  await page.waitForTimeout(400);
-  assert(await job(jobA, '(j.items||[]).length') === 2, '1: job.items length === 2 after save, got ' + await job(jobA, '(j.items||[]).length'));
+  await page.evaluate(async (args) => {
+    const [id, pId, cId] = args;
+    const j = jobs.find(x => x.id === id);
+    j.items = [
+      { id: cuid(), serviceId: pId, name: 'Protein Pack', qty: 2, unitPrice: 150 },
+      { id: cuid(), serviceId: cId, name: 'Nutrition Consult', qty: 1, unitPrice: 300 },
+    ];
+    await dbPut('jobs', j);
+    await reload();
+  }, [jobA, proteinId, consultId]);
+  assert(await job(jobA, '(j.items||[]).length') === 2, '1: job.items length === 2, got ' + await job(jobA, '(j.items||[]).length'));
   const item0 = await job(jobA, 'JSON.stringify(j.items[0])').then(JSON.parse);
   assert(item0.serviceId === proteinId && item0.name === 'Protein Pack' && item0.qty === 2 && item0.unitPrice === 150,
-    '1: item[0] snapshot matches the product, got ' + JSON.stringify(item0));
+    '1: item[0] matches the product, got ' + JSON.stringify(item0));
   const item1 = await job(jobA, 'JSON.stringify(j.items[1])').then(JSON.parse);
   assert(item1.serviceId === consultId && item1.name === 'Nutrition Consult' && item1.qty === 1 && item1.unitPrice === 300,
-    '1: item[1] snapshot matches the service, got ' + JSON.stringify(item1));
+    '1: item[1] matches the service, got ' + JSON.stringify(item1));
   assert(!!item0.id && !!item1.id, '1: each item carries its own cuid-style id');
 
   // ═══ 2. Catalog-edit isolation: a later price edit never rewrites history ═
@@ -182,18 +172,21 @@ const errors = [];
   assert(cardText.includes('2 item(s)'), '3: card chip shows "2 item(s)", got: ' + cardText.slice(0, 160));
   assert(cardText.includes('฿600'), '3: card chip shows the summed amount ฿600 (300+300), got: ' + cardText.slice(0, 160));
 
-  // ═══ 4. Detail re-edit: remove one item, save → items length 1 ══════════
+  // ═══ 4. Removing an item directly, then re-editing, preserves the rest ══
+  // TSK-023 removed removeJobItem()'s only UI trigger too — simulate the
+  // same data-layer effect directly, then confirm a follow-up detail edit's
+  // save (the same preserve-block §5 exercises) doesn't resurrect it.
+  await page.evaluate(async id => {
+    const j = jobs.find(x => x.id === id);
+    j.items = j.items.filter(it => it.name !== 'Protein Pack');
+    await dbPut('jobs', j);
+    await reload();
+  }, jobA);
   await page.evaluate(id => openEditJob(id), jobA);
   await page.waitForTimeout(300);
-  // jobA already has items, so openEditJob() should default straight into
-  // Full details (TSK-008 decision) — still pop the drill row open explicitly
-  // so this test isn't relying on that default to reach #job-items-body.
-  await page.evaluate(() => { setJobModalMode('full'); document.getElementById('job-items-details').open = true; });
-  await page.locator('#job-items-body .list-row').nth(0).locator('button[aria-label="Remove item"]').click();
-  await page.waitForTimeout(200);
   await page.evaluate(() => saveJob());
   await page.waitForTimeout(400);
-  assert(await job(jobA, '(j.items||[]).length') === 1, '4: one item removed + saved → length 1');
+  assert(await job(jobA, '(j.items||[]).length') === 1, '4: one item removed + a follow-up save → length stays 1');
   assert(await job(jobA, 'j.items[0].name') === 'Nutrition Consult', '4: the remaining item is the one NOT removed');
 
   // ═══ 5. A plain detail save (no items touch) preserves items (wipe-guard) ═

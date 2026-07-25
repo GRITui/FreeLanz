@@ -518,19 +518,10 @@
     <div class="modal-title" id="modal-title" data-i18n="add_job">Add session</div>
     <input type="hidden" id="j-edit-id">
 
-    <!-- TSK-008: Quick log / Full details split. Reuses the .seg control
-         verbatim (styles.css "Segmented control (theme picker etc.)",
-         canonical live usage: #theme-seg in More/Settings) — same track/
-         active-segment tokens, no new segmented-control styling invented.
-         setJobModalMode() toggles which fields below are visible; it does
-         NOT remove any field/section from the DOM, so every existing
-         Playwright selector into #job-tracking-section still resolves once
-         Full details (or the relevant drill row) is opened — see
-         applyJobModalMode() in app.js. -->
-    <div class="seg" id="job-mode-seg" style="margin:0 16px 14px">
-      <button type="button" id="seg-job-quick" onclick="setJobModalMode('quick')" data-i18n="job_seg_quick">Quick log</button>
-      <button type="button" id="seg-job-full" onclick="setJobModalMode('full')" data-i18n="job_seg_full">Full details</button>
-    </div>
+    <!-- TSK-023: the Quick log/Full details toggle (TSK-008) is removed per
+         the owner — every field below is always shown now. Fee/Tip/Expense/
+         Sessions stay untouched (held, pending a revenue-model replacement;
+         see backlog-inbox.md TSK-023). -->
 
     <div class="form-section">
       <div class="field">
@@ -555,12 +546,9 @@
           <div class="field-half"><label for="j-amount" data-i18n="field_amount">Fee</label><input type="number" id="j-amount" class="tnum" inputmode="decimal" min="0" placeholder="0" oninput="calcNet()"></div>
           <div class="field-half"><label for="j-tip" data-i18n="field_tip">Tip</label><input type="number" id="j-tip" class="tnum" inputmode="decimal" min="0" placeholder="0" oninput="calcNet()"></div>
         </div>
-        <!-- Full-details-only fields below (id="j-full-only"). Quick log
-             deliberately omits Service/apply-to-package/Expense/Sessions/
-             Notes — see the design handoff README §2. Hiding is a visibility
-             toggle only (applyJobModalMode() in app.js): values already set
-             by populateJobSelects()/refreshJobPackageRow() are preserved and
-             still submitted by saveJob() regardless of which mode is showing. -->
+        <!-- TSK-023: these fields (Service/apply-to-package/Expense/Sessions/
+             Notes) used to hide under Quick log; the toggle is gone now, so
+             they're always shown. -->
         <div class="field" id="j-service-field">
           <label for="j-service" data-i18n="field_service">Service</label>
           <select id="j-service" onchange="onJobServiceChange(this.value)"></select>
@@ -586,17 +574,17 @@
       <span class="net-box-val tnum" id="j-net">฿0</span>
     </div>
 
-    <!-- Full-details-only: the 4 sub-feature sections, each collapsed to a
-         drill row (native <details>/<summary class="section-title">, the
-         same collapsible pattern already used for Settings sections —
-         styles.css "Collapsible Settings sections"). Closed by default so
-         a Full-details job modal reads as 4 summary rows with counts; the
-         inner containers (#job-options-body etc.) stay in the DOM at all
-         times — only their *visibility* is gated by [open] — so every
-         existing Playwright test that queries/fills/clicks inside them
-         still works once it opens the relevant <details> first (see
-         tests/check-*.js). -->
-    <div class="form-section" id="job-tracking-section" style="display:none">
+    <!-- TSK-023: "Items on this engagement" and "Time tracking" (+ Focus
+         mode) are removed per the owner — each was its own self-contained
+         feature with no other entry point (addJobItem()/the timer start
+         button lived only here), so removing the drill row retires the
+         whole feature, not just its UI. Options compared + Plan & payments
+         stay — they host Book viewing and milestone gating, which the owner
+         asked to keep working (see TSK-018 part 2). The 2 remaining
+         sections are still collapsed <details> drill rows by default; their
+         inner containers stay in the DOM at all times, gated only by [open]
+         — see tests/check-*.js. -->
+    <div class="form-section" id="job-tracking-section">
       <details class="job-drill" id="job-options-details">
         <summary class="section-title">
           <!-- Title text is persona-dependent ("Buildings" for realestate)
@@ -612,13 +600,6 @@
         <div id="job-options-body"></div>
       </details>
 
-      <!-- Pass M3-L2: products/extra services attached to this engagement —
-           flow automatically into the quote and invoice (see renderJobItems). -->
-      <details class="job-drill" id="job-items-details">
-        <summary class="section-title"><span><span data-i18n="job_items_title">Items on this engagement</span><span class="job-drill-count" id="job-items-count"></span></span></summary>
-        <div id="job-items-body"></div>
-      </details>
-
       <!-- TSK-018 part 2: the standalone "+ Step with date" freeform-reminder
            UI (job.subTasks[]) is removed per the owner ("I don't actually
            use it that way"). job.subTasks[] itself stays as a data field —
@@ -629,11 +610,6 @@
         <summary class="section-title"><span><span data-i18n="plan_section_title">Plan &amp; payments</span><span class="job-drill-count" id="job-plan-count"></span></span></summary>
         <div id="job-milestones-body"></div>
         <button type="button" class="btn-submit" style="margin-top:8px" onclick="addMilestone(document.getElementById('j-edit-id').value)" data-i18n="add_milestone">+ Add milestone</button>
-      </details>
-
-      <details class="job-drill" id="job-time-details">
-        <summary class="section-title"><span><span data-i18n="time_tracking_title">Time tracking</span><span class="job-drill-count" id="job-time-count"></span></span></summary>
-        <div id="job-timer-body"></div>
       </details>
     </div>
 
@@ -776,21 +752,8 @@
   </div>
 </div>
 
-<!-- Focus mode: full-screen Pomodoro overlay launched from a job's time
-     tracker. The ring is a purely visual 25-min pacing aid — it never force-
-     stops the underlying timer, since cutting off real billable client work
-     at 25:00 would be a bad default. -->
-<div class="focus-overlay" id="focus-overlay">
-  <button type="button" class="focus-close" onclick="closeFocusMode()" aria-label="Close Focus mode">✕</button>
-  <div class="focus-ring" id="focus-ring">
-    <span class="focus-ring-time tnum" id="focus-ring-time">25:00</span>
-  </div>
-  <div class="focus-billable"><span data-i18n="billable_session">Billable this session:</span> <span class="tnum" id="focus-billable-time">0:00</span></div>
-  <div class="focus-controls">
-    <button type="button" class="focus-btn" id="focus-pause-btn" onclick="toggleFocusPause()" data-i18n="focus_pause">Pause</button>
-    <button type="button" class="focus-btn focus-btn-stop" onclick="stopFocusMode()" data-i18n="focus_stop">Stop</button>
-  </div>
-</div>
+<!-- TSK-023: Focus mode (the full-screen Pomodoro overlay) is removed along
+     with its only launch point, the Time tracking drill row's timer. -->
 
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
