@@ -285,21 +285,43 @@ const errors = [];
   assert(await job(jobC, '!!j.pendingGateStage'), '9: skipJobStage gates');
   await page.click('.gate-btn-secondary');
   await page.waitForTimeout(400);
-  // cash path — lands on Booked, already marked paid, and gates on Booked
+  // cash path — TSK-023 removed Fee from the Add-session form, so
+  // cashJobPath() now opens a 'cash' gate asking for the amount FIRST — the
+  // job doesn't move until resolveGateCash() confirms it. Once confirmed,
+  // it lands on Booked, already marked paid with the entered amount, and
+  // gates on Booked exactly as before.
   const jobD = await mkJob('Cash svc', 'inquiry');
+  // The Cash gate renders as part of jobD's own card, so (unlike the old
+  // one-shot cashJobPath that jumped the active rail itself) the rail must
+  // already be on jobD's current stage before the gate can appear — exactly
+  // as it would be for a real click on that card's own button.
+  await page.evaluate(id => { switchScreen('pipeline'); selectPipelineStage(jobStage(jobs.find(j => j.id === id))); }, jobD);
+  await page.waitForTimeout(200);
   await page.evaluate(id => cashJobPath(id), jobD);
   await page.waitForSelector('.gate-card', { timeout: 5000 });
-  assert(await job(jobD, `jobStage(j) === 'booked' && j.paid === true && j.pendingGateStage === 'booked'`),
-    '9: cashJobPath lands on booked, marks paid, and gates');
+  assert(await job(jobD, `jobStage(j) === 'inquiry' && !j.paid`), "9: cashJobPath opens the cash-amount gate before moving anything");
+  await page.fill(`#gate-cash-amount-${jobD}`, '750');
+  await page.click('.gate-btn-primary');
+  await page.waitForSelector('.gate-card', { timeout: 5000 });
+  assert(await job(jobD, `jobStage(j) === 'booked' && j.paid === true && j.amount === 750 && j.netAmount === 750 && j.pendingGateStage === 'booked'`),
+    '9: confirming the cash amount lands on booked, marks paid, attributes the amount, and gates');
   await page.click('.gate-btn-secondary');
   await page.waitForTimeout(400);
-  // mark paid — TSK-014: no longer a stage move, so it never gates
+  // mark paid (invoiced) — TSK-014: no longer a stage move, so it never
+  // gates. TSK-023: revenue now comes from the invoice's own youReceive.
   const jobE = await mkJob('Paid svc', 'booked');
+  const paidInvId = await page.evaluate(async () => {
+    const uid = currentUser.id;
+    const id = await dbAdd('invoices', { uid, status: 'sent', youReceive: 900, cuid: cuid(), updatedAt: nowISO() });
+    await reload();
+    return id;
+  });
+  await page.evaluate((args) => { const j = jobs.find(x => x.id === args[0]); j.invoiceId = args[1]; }, [jobE, paidInvId]);
   await page.evaluate(id => markJobPaid(id), jobE);
   await page.waitForTimeout(400);
-  assert(await job(jobE, `jobStage(j) === 'booked' && j.paid === true && j.pendingGateStage == null`)
+  assert(await job(jobE, `jobStage(j) === 'booked' && j.paid === true && j.pendingGateStage == null && j.amount === 900 && j.netAmount === 900`)
     && !(await page.evaluate(() => !!document.querySelector('.gate-card'))),
-    '9: markJobPaid never gates (paid is a job-level flag, not a stage)');
+    "9: markJobPaid never gates and attributes the invoice's youReceive as revenue");
   // quote doc save — still a real stage move (quote -> booked), still gates
   const jobF = await mkJob('Quote svc', 'quote');
   await page.evaluate(id => window.onEngagementQuoteCreated(999, id), jobF);

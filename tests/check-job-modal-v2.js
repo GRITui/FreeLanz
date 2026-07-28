@@ -3,15 +3,23 @@
  * the owner — every field is always shown now, and the tracking section
  * (now just Options compared + Plan & payments; Items on this engagement
  * and Time tracking were removed too, see app.js's TSK-023 comments) always
- * shows once a job is saved. This suite covers: field visibility, the live
- * net-take box, the de-escalated Cancel button, the 2 remaining drill-row
- * summaries + their open/close behavior, and a from-scratch save.
+ * shows once a job is saved. TSK-023's held second half also shipped: Fee/
+ * Tip/Expense/Sessions and the net-take box are gone from this form
+ * entirely — a job's revenue is now attributed later (markJobPaid() from
+ * the invoice, applyPackageRevenue() at package delivery, or the Cash job
+ * gate's resolveGateCash()), never captured here. This suite covers: field
+ * visibility (including confirming the removed fields are actually gone),
+ * that an ordinary detail edit preserves whatever revenue a job already has
+ * rather than zeroing it, the de-escalated Cancel button, the 2 remaining
+ * drill-row summaries + their open/close behavior, and a from-scratch save.
  *
  * This suite does NOT re-test the sub-features' own mechanics (options
  * booking hooks, milestone gating, item catalog snapshotting, etc.) — those
  * stay covered by check-options-lost.js/check-items.js/check-merges.js/
- * check-scheduling.js. This suite only proves the job modal's own
- * presentation layer.
+ * check-scheduling.js. Nor does it re-test the revenue-attribution flows
+ * themselves (Cash gate, package apportionment, invoice sync) — see
+ * check-service-packages.js and check-scheduling.js for those. This suite
+ * only proves the job modal's own presentation layer.
  *
  * Run: NODE_PATH=/opt/node22/lib/node_modules node tests/check-job-modal-v2.js
  * Expects http://localhost:8923 serving ../app.
@@ -65,30 +73,40 @@ const errors = [];
   const fieldDisplay = (id) => page.evaluate(i => getComputedStyle(document.getElementById(i)).display, id);
   const trackingDisplay = () => page.evaluate(() => getComputedStyle(document.getElementById('job-tracking-section')).display);
 
-  // ═══ 1. Add-mode: every field always shown; tracking section hidden
-  //         (no saved job id yet to attach Options/milestones to) ═════════
+  // ═══ 1. Add-mode: Service/Notes always shown; Fee/Tip/Expense/Sessions
+  //         and the net-take box are gone from this form entirely (TSK-023);
+  //         tracking section hidden (no saved job id yet to attach
+  //         Options/milestones to) ═══════════════════════════════════════
   await page.evaluate(() => openAddJob());
   await page.waitForTimeout(200);
   assert(await page.evaluate(() => !document.getElementById('job-mode-seg')), '1: the Quick log/Full details toggle no longer exists');
   assert(await fieldDisplay('j-service-field') !== 'none', '1: Service is always shown');
-  assert(await fieldDisplay('j-full-row') !== 'none', '1: Expense/Sessions are always shown');
   assert(await fieldDisplay('j-notes-field') !== 'none', '1: Notes is always shown');
-  assert(await fieldDisplay('j-amount') !== 'none', '1: Fee is shown');
-  assert(await fieldDisplay('j-tip') !== 'none', '1: Tip is shown');
+  assert(await page.evaluate(() => !document.getElementById('j-amount')), '1: Fee field no longer exists');
+  assert(await page.evaluate(() => !document.getElementById('j-tip')), '1: Tip field no longer exists');
+  assert(await page.evaluate(() => !document.getElementById('j-expense')), '1: Expense field no longer exists');
+  assert(await page.evaluate(() => !document.getElementById('j-count')), '1: Sessions field no longer exists');
+  assert(await page.evaluate(() => !document.getElementById('j-full-row')), '1: the Expense/Sessions row no longer exists');
+  assert(await page.evaluate(() => !document.getElementById('j-net')), '1: the net-take value no longer exists');
+  assert(await page.evaluate(() => !document.querySelector('.net-box')), '1: the net-take box no longer exists');
   assert(await trackingDisplay() === 'none', '1: add-mode never shows the tracking section (no saved job id yet)');
+  await page.evaluate(() => closeJobModal());
 
-  // ═══ 2. Net-take recomputes live (fee + tip - expense) ═════════════════
-  await page.fill('#j-amount', '1000');
-  await page.fill('#j-tip', '200');
-  await page.waitForTimeout(100);
-  let net = await page.locator('#j-net').textContent();
-  assert(net.includes('1,200') || net.includes('1200'), '2: net = fee+tip with expense untouched (0), got ' + net);
-  await page.fill('#j-expense', '300');
-  await page.waitForTimeout(100);
-  net = await page.locator('#j-net').textContent();
-  assert(net.includes('900'), '2: net = fee+tip-expense (1000+200-300=900), got ' + net);
-  await page.fill('#j-expense', '');   // clear so it doesn't leak into test 3's save
-  await page.waitForTimeout(100);
+  // ═══ 2. Editing an already-paid job's date/notes preserves its already-
+  //         attributed revenue (amount/tip/expense/netAmount) rather than
+  //         silently zeroing it — there's no form field to re-enter it from
+  //         anymore, so dbPut() must never wipe it on an unrelated edit ═══
+  const paidJobId = await mkJob({ amount: 500, tip: 50, expense: 20, netAmount: 530, paid: true });
+  await page.evaluate(id => openEditJob(id), paidJobId);
+  await page.waitForTimeout(200);
+  await page.fill('#j-notes', 'updated note');
+  await page.evaluate(() => saveJob());
+  await page.waitForTimeout(300);
+  const afterEdit = await page.evaluate(async id => (await dbAll('jobs')).find(j => j.id === id), paidJobId);
+  assert(!!afterEdit && afterEdit.amount === 500 && afterEdit.tip === 50 && afterEdit.expense === 20 && afterEdit.netAmount === 530,
+    '2: an ordinary detail edit preserves the job\'s already-attributed revenue, got ' +
+    JSON.stringify(afterEdit && { amount: afterEdit.amount, tip: afterEdit.tip, expense: afterEdit.expense, netAmount: afterEdit.netAmount }));
+  assert(!!afterEdit && afterEdit.notes === 'updated note', '2: the actual edited field (notes) did save, got ' + (afterEdit && afterEdit.notes));
 
   // ═══ 3. Cancel is de-escalated to plain-text, Save stays full-width brand ═
   const btnClasses = await page.evaluate(() => {
@@ -104,10 +122,14 @@ const errors = [];
   assert(!!cancelBtn && cancelBtn.cls.includes('btn-text'), '3: Cancel button uses the existing plain-text .btn-text class, got ' + JSON.stringify(cancelBtn));
   assert(!!saveBtn && saveBtn.cls.includes('btn-submit'), '3: Save stays the full-width primary .btn-submit button, got ' + JSON.stringify(saveBtn));
 
-  // ═══ 4. A from-scratch new job saves correctly ══════════════════════════
+  // ═══ 4. A from-scratch new job saves with zero revenue — TSK-023 removed
+  //         the only fields that could ever set it here; revenue gets
+  //         attributed later via markJobPaid()/applyPackageRevenue()/
+  //         resolveGateCash() instead (see check-service-packages.js and
+  //         check-scheduling.js for those flows) ═══════════════════════════
+  await page.evaluate(() => openAddJob());
+  await page.waitForTimeout(200);
   await page.selectOption('#j-customer', String(await page.evaluate(() => window.__cid)));
-  await page.fill('#j-amount', '800');
-  await page.fill('#j-tip', '50');
   await page.evaluate(() => saveJob());
   await page.waitForTimeout(400);
   const newJob = await page.evaluate(async () => {
@@ -115,9 +137,9 @@ const errors = [];
     return all.filter(j => j.clientId === window.__cid).sort((a, b) => b.id - a.id)[0];
   });
   assert(!!newJob, '4: a new job was actually created');
-  assert(newJob.amount === 800 && newJob.tip === 50 && newJob.expense === 0,
-    '4: save carries fee/tip and defaults untouched expense to 0, got ' + JSON.stringify({ amount: newJob.amount, tip: newJob.tip, expense: newJob.expense }));
-  assert(newJob.netAmount === 850, '4: netAmount computed fee+tip-expense, got ' + newJob.netAmount);
+  assert(!!newJob && newJob.amount === 0 && newJob.tip === 0 && newJob.expense === 0 && newJob.count === 0,
+    '4: a brand-new job has zero revenue by default, got ' + JSON.stringify(newJob && { amount: newJob.amount, tip: newJob.tip, expense: newJob.expense, count: newJob.count }));
+  assert(!!newJob && newJob.netAmount === 0, '4: netAmount is 0 too, got ' + (newJob && newJob.netAmount));
 
   // ═══ 5. Editing any job — even a genuinely empty one — always shows the
   //         tracking section now (no more Quick/Full mode decision) ═══════

@@ -121,14 +121,16 @@ const { chromium } = require('playwright');
   assert(/3/.test(cardText) && /1/.test(cardText), '6: card chip shows 3 options / 1 interested-or-chosen, got: ' + cardText.slice(0, 120));
 
   // ═══ 7. saveJob edit-preserve: options + subTasks survive a detail edit ══
+  // TSK-023 removed Fee from this form — notes is the actual field edited
+  // here now to prove the save itself really happened.
   await page.evaluate(id => openEditJob(id), jobA);
   await page.waitForTimeout(300);
-  await page.fill('#j-amount', '750');
+  await page.fill('#j-notes', 'edited note');
   await page.evaluate(() => saveJob());
   await page.waitForTimeout(400);
   assert(await job(jobA, '(j.options||[]).length') === 3, '7: options survive an ordinary detail edit save');
   assert(await job(jobA, '(j.subTasks||[]).length') === 2, '7: sub-tasks survive the same edit save (regression fix)');
-  assert(await job(jobA, 'j.amount') === 750, '7: the edit itself actually saved');
+  assert(await job(jobA, 'j.notes') === 'edited note', '7: the edit itself actually saved');
 
   // ═══ 8. Mark as lost (now a reason-picker modal, not a bare confirm()) ══
   const jobB = await mkJob('Dead deal', 'quote');

@@ -82,7 +82,6 @@ const errors = [];
   // ═══ 2. Saving creates the package from the service's own usageQty/rate,
   //         links job.packageId to it, and (since a fresh job hasn't been
   //         delivered yet) leaves its balance untouched at 10/10 ══════════
-  await page.fill('#j-amount', '5500');
   await page.evaluate(() => saveJob());
   await page.waitForTimeout(400);
   let clientJobs = await jobsForClient();
@@ -124,7 +123,6 @@ const errors = [];
   await page.waitForTimeout(150);
   row = await packageRow();
   assert(row.display === 'none', '4: package row hidden for a non-package-type service, even though this client has an active training package');
-  await page.fill('#j-amount', '800');
   await page.evaluate(() => saveJob());
   await page.waitForTimeout(400);
   clientJobs = await jobsForClient();
@@ -143,7 +141,6 @@ const errors = [];
   row = await packageRow();
   assert(row.display === 'flex' && /new/i.test(row.label) && row.label.includes('5'),
     '5: Nutrition consult (its own package-type service) offers to start its own new package, got ' + row.label);
-  await page.fill('#j-amount', '3000');
   await page.evaluate(() => saveJob());
   await page.waitForTimeout(400);
   clientJobs = await jobsForClient();
@@ -188,6 +185,19 @@ const errors = [];
   assert(listHtml.includes('pkg-badge'), '8: the Clients list row renders a pkg-badge for this client');
   assert(listHtml.includes('Nutrition consult') || listHtml.includes('1-on-1 training'),
     '8: the pkg-badge is tagged with a service name, not just a bare count, got snippet ' + (listHtml.match(/pkg-badge[^<]*/) || [''])[0]);
+
+  // ═══ 9. logPackageSession() attributes this delivery's share of the
+  //         package's purchase price onto the job — TSK-023 removed Fee
+  //         from every job's create form, including package sessions,
+  //         which never captured their own money to begin with (paid once,
+  //         at package purchase, previously never read back anywhere) ═════
+  await page.evaluate(id => logPackageSession(id), trainingJobId);
+  await page.waitForTimeout(200);
+  const afterLog = await page.evaluate(id => jobs.find(j => j.id === id), trainingJobId);
+  assert(!!afterLog && afterLog.count === 2, '9: logPackageSession bumped count to 2, got ' + (afterLog && afterLog.count));
+  assert(!!afterLog && afterLog.amount === 1100 && afterLog.netAmount === 1100,
+    '9: revenue apportioned as (2 of 10 sessions) * 5500 price = 1100, got ' +
+    JSON.stringify(afterLog && { amount: afterLog.amount, netAmount: afterLog.netAmount }));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   console.log('Console/page errors:', errors.length ? errors : 'none');
