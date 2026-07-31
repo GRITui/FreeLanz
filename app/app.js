@@ -615,6 +615,23 @@ function packageUsed(pkg) {
     .filter(j => j.packageId === pkg.id && jobDelivered(j))
     .reduce((sum, j) => sum + (Number(j.count) > 0 ? Number(j.count) : 1), 0);
 }
+// TSK-023 (money-field removal): a package-linked job never captures its own
+// Fee — the money was already paid once, at package purchase (pkg.price).
+// This attributes THIS delivery's share of that purchase (count/totalSessions
+// * price) onto the job record itself, so Home/the goal card/CSV export
+// (which all just read job.amount/netAmount, unchanged) correctly count
+// package-delivered work as revenue instead of the ฿0 every package session
+// silently reported before this pass (package.price was write-only until
+// now — nothing read it back). Mutates `j` in place; callers still persist
+// it themselves alongside whatever else they're saving (j.count, stage...).
+function applyPackageRevenue(j, pkg) {
+  const total = Number(pkg && pkg.totalSessions) || 0;
+  const cnt = Number(j.count) || 0;
+  j.amount = total > 0 ? (cnt / total) * (Number(pkg.price) || 0) : 0;
+  j.tip = 0;
+  j.expense = 0;
+  j.netAmount = j.amount;
+}
 // A single check point for expiry: once expiresAt passes, any unused
 // balance is forfeited (not carried over) — this is the only place that
 // needs to know about expiry, since activePackageFor()'s own
@@ -751,6 +768,8 @@ const I18N = {
     gate_pkg_session_context:'Book the next session now.',
     gate_pkg_final_title:'Final session — package complete 🎉',
     gate_pkg_final_context:'Renew without a gap?',
+    gate_cash_title:'Cash job', gate_cash_context:'How much did the client pay?',
+    gate_cash_amount_ph:'0', gate_confirm_cash_btn:'Mark paid',
     pl_postponed_toast:'Postponed to {date}',
     pl_session_logged_toast:'Session logged — {used} / {total}',
     pl_package_complete_toast:'Package complete — renewal card in Quote',
@@ -1282,6 +1301,8 @@ const I18N = {
     gate_pkg_session_context:'นัดครั้งถัดไปตอนนี้เลย',
     gate_pkg_final_title:'ครั้งสุดท้าย — แพ็กเกจครบแล้ว 🎉',
     gate_pkg_final_context:'ต่ออายุแบบไม่มีช่วงว่างไหม?',
+    gate_cash_title:'จ่ายสด', gate_cash_context:'ลูกค้าจ่ายเท่าไหร่?',
+    gate_cash_amount_ph:'0', gate_confirm_cash_btn:'บันทึกว่าชำระแล้ว',
     pl_postponed_toast:'เลื่อนไปเป็น {date} แล้ว',
     pl_session_logged_toast:'บันทึกครั้งนี้แล้ว — {used} / {total}',
     pl_package_complete_toast:'แพ็กเกจครบแล้ว — สร้างใบเสนอราคาต่ออายุในขั้นเสนอราคาแล้ว',
@@ -4197,8 +4218,6 @@ function refreshJobPackageRow(existingPackageId) {
     label.textContent = t('apply_to_package_new').replace('{n}', svc.usageQty).replace('{unit}', packageUnitLabel());
     checkbox.checked = true;
   }
-  const countLabel = document.getElementById('j-count-label');
-  if (countLabel) countLabel.textContent = packageUnitLabel();
   refreshPackageFastPathButton(cid);
 }
 // "Ship remaining service" fast path — for a client who already has an
@@ -4301,9 +4320,11 @@ async function saveFastPathDelivery() {
     // job earns its share the moment it's logged delivered, same as the old
     // 6-stage model (a job landing directly on Delivery/Extend was already
     // >= the old paidIdx, so jobEarned() counted it automatically).
+    // applyPackageRevenue() below attributes that share onto amount/netAmount.
     paid: true,
     invoiceId: null, quoteDocId: null, packageId: pkg.id, updatedAt: nowISO(),
   };
+  applyPackageRevenue(obj, pkg);
   await dbPut('jobs', obj);
   mirrorJob(obj);
   logEvent('session_logged');
@@ -4325,8 +4346,6 @@ function onJobServiceChange(v) {
     return;
   }
   if (!v) return;
-  const s = services.find(x => x.id === parseInt(v));
-  if (s) { document.getElementById('j-amount').value = s.rate; calcNet(); }
   refreshJobPackageRow(null);
 }
 // TSK-023: the Quick log/Full details toggle (TSK-008) is removed per the
@@ -4339,7 +4358,8 @@ function openAddJob(dateISO) {
   document.getElementById('modal-title').textContent = t('add_job');
   document.getElementById('j-edit-id').value = '';
   document.getElementById('j-date').value = dateISO || todayISO();
-  ['j-amount','j-tip','j-expense','j-count','j-notes'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  const notesEl = document.getElementById('j-notes');
+  if (notesEl) notesEl.value = '';
   populateJobSelects('', '');
   resetPackageFastPath();
   // Options/milestones both need a saved job id to attach to — add-mode
@@ -4349,7 +4369,6 @@ function openAddJob(dateISO) {
   refreshJobPackageRow(null);
   document.getElementById('j-delete').style.display = 'none';
   clearFieldErrors();
-  calcNet();
   openJobModal();
 }
 function openEditJob(id) {
@@ -4360,8 +4379,7 @@ function openEditJob(id) {
   resetPackageFastPath();
   const set = (i,v)=>{ const el=document.getElementById(i); if(el) el.value = (v==null?'':v); };
   set('j-date', j.date);
-  set('j-amount', j.amount); set('j-tip', j.tip);
-  set('j-expense', j.expense); set('j-count', j.count); set('j-notes', j.notes);
+  set('j-notes', j.notes);
   populateJobSelects(j.clientId != null ? j.clientId : '', j.serviceId != null ? j.serviceId : '');
   const tracking = document.getElementById('job-tracking-section');
   if (tracking) tracking.style.display = 'block';
@@ -4370,7 +4388,6 @@ function openEditJob(id) {
   window.__milestoneFormOpen = false;
   renderJobTracking(id);
   clearFieldErrors();
-  calcNet();
   openJobModal();
 }
 function openJobModal() { document.getElementById('modal-job').classList.add('open'); }
@@ -4378,11 +4395,6 @@ function closeJobModal() {
   document.getElementById('modal-job').classList.remove('open');
 }
 
-function calcNet() {
-  const num = id => parseFloat(document.getElementById(id).value) || 0;
-  const net = num('j-amount') + num('j-tip') - num('j-expense');
-  document.getElementById('j-net').textContent = money(net, 0);
-}
 function clearFieldErrors() {
   document.querySelectorAll('.field-invalid').forEach(el => el.classList.remove('field-invalid'));
   document.querySelectorAll('.field-err').forEach(el => el.remove());
@@ -4405,20 +4417,12 @@ function markFieldError(inputId, msgKey) {
   try { input.focus({preventScroll:false}); } catch(e) { input.focus(); }
 }
 async function saveJob() {
-  const num = id => parseFloat(document.getElementById(id).value) || 0;
   const date = document.getElementById('j-date').value;
-  const amount = num('j-amount'), tip = num('j-tip'), expense = num('j-expense');
-  const count = parseInt(document.getElementById('j-count').value) || 0;
   const notes = (document.getElementById('j-notes').value || '').trim();
   clearFieldErrors();
   if (!date) { markFieldError('j-date', 'err_enter_date'); return; }
   const custVal = document.getElementById('j-customer').value;
   if (!custVal || custVal === '__new__') { markFieldError('j-customer', 'err_select_client'); return; }
-  if (amount < 0) { markFieldError('j-amount', 'err_neg'); return; }
-  for (const [fid, val, max] of [['j-amount',amount,100000000],['j-tip',tip,100000000],['j-expense',expense,100000000],['j-count',count,100000]]) {
-    if (val < 0) { markFieldError(fid, 'err_neg'); return; }
-    if (val > max) { markFieldError(fid, 'err_too_big'); return; }
-  }
   const uid = isGuest ? 'guest' : currentUser.id;
   // The Client dropdown is the only "who" input now (Member Tags merged into
   // Client) — client is always derived from the selected Customer record.
@@ -4430,8 +4434,7 @@ async function saveJob() {
   const svc = serviceId != null ? services.find(s => s.id === serviceId) : null;
   const serviceName = svc ? svc.name : '';
   const obj = {uid, date, client, clientId, serviceId, serviceName,
-    jobType: settings.workType || '',
-    amount, tip, expense, count, notes, netAmount: amount + tip - expense};
+    jobType: settings.workType || '', notes};
   const editId = document.getElementById('j-edit-id').value;
   if (editId) {
     const id = parseInt(editId);
@@ -4476,6 +4479,17 @@ async function saveJob() {
     // engagement) — preserved here purely so an existing job's historical
     // items survive an unrelated edit instead of being wiped.
     obj.items = prev.items || [];
+    // TSK-023 (money-field removal, the previously-held half): Fee/Tip/
+    // Expense/Sessions no longer have inputs on this form at all — an
+    // ordinary detail edit (date, service, notes) must preserve whatever
+    // revenue is already attributed to this job (via markJobPaid(),
+    // applyPackageRevenue(), or the Cash job gate's resolveGateCash()),
+    // exactly like subTasks/milestones above, not silently zero it out.
+    obj.amount = prev.amount || 0;
+    obj.tip = prev.tip || 0;
+    obj.expense = prev.expense || 0;
+    obj.count = prev.count || 0;
+    obj.netAmount = prev.netAmount || 0;
   } else {
     obj.cuid = cuid();
     // New engagements snapshot the active stage order and start at its first stage.
@@ -4485,6 +4499,10 @@ async function saveJob() {
     obj.invoiceId = null;
     obj.quoteDocId = null;
     obj.due = null; obj.note = null; obj.attempt = 1; obj.dueBookingCuid = null;
+    // A brand-new job hasn't earned anything yet — revenue gets attributed
+    // later, at whichever moment actually applies (invoice marked paid,
+    // package session delivered, or the Cash job gate's amount prompt).
+    obj.amount = 0; obj.tip = 0; obj.expense = 0; obj.count = 0; obj.netAmount = 0;
   }
   const applyPkgEl = document.getElementById('j-apply-package');
   const pkgIdEl = document.getElementById('j-package-id');
@@ -4924,8 +4942,13 @@ function pipelineCard(j, stage) {
   const sendInvoice = (!complete && stage === 'booked' && j.invoiceId == null)
     ? `<button type="button" class="pl-skip" onclick="event.stopPropagation();typeof openInvoiceForm==='function'&&openInvoiceForm(${j.id})">${htmlEsc(t('send_invoice_btn'))}</button>`
     : '';
+  // TSK-023 (money-field removal): an invoiced job's revenue comes straight
+  // from the invoice (markJobPaid() reads inv.youReceive), no amount prompt
+  // needed — but a job marked paid with no invoice attached has nowhere
+  // else money could have come from, so that path routes through the same
+  // one-field Cash gate cashJobPath() uses (markPaidNoInvoice()).
   const markPaidBtn = (!complete && stage === 'booked' && !j.paid)
-    ? `<button type="button" class="pl-skip" onclick="event.stopPropagation();markJobPaid(${j.id})">${htmlEsc(t('mark_paid_btn'))}</button>`
+    ? `<button type="button" class="pl-skip" onclick="event.stopPropagation();${j.invoiceId != null ? 'markJobPaid' : 'markPaidNoInvoice'}(${j.id})">${htmlEsc(t('mark_paid_btn'))}</button>`
     : '';
   const secondaryRow = (skip || finish || cashJob || reviseQuote || reviseInvoice || sendInvoice || markPaidBtn)
     ? `<div class="kb-card-foot pl-secondary-row">${skip}${finish}${cashJob}${reviseQuote}${reviseInvoice}${sendInvoice}${markPaidBtn}</div>`
@@ -5055,6 +5078,20 @@ function gateCardHtml(j) {
       <div class="gate-btns">
         <button type="button" class="gate-btn-secondary" onclick="event.stopPropagation();resolveGatePkgFinal(${j.id},false)">${htmlEsc(t('gate_just_complete_btn'))}</button>
         <button type="button" class="gate-btn-primary" onclick="event.stopPropagation();resolveGatePkgFinal(${j.id},true)">${htmlEsc(t('gate_send_renewal_btn'))}</button>
+      </div>
+    </div>`;
+  }
+  if (kind === 'cash') {
+    // TSK-023 (money-field removal): Fee no longer lives on the Add-session
+    // form, so the Cash job shortcut needs its own one-field ask for how
+    // much the client actually paid — see resolveGateCash().
+    return `<div class="gate-card" onclick="event.stopPropagation()">
+      <div class="gate-title">${htmlEsc(t('gate_cash_title'))}</div>
+      <div class="gate-context">${htmlEsc(t('gate_cash_context'))}</div>
+      <input type="number" class="gate-date tnum" id="gate-cash-amount-${j.id}" inputmode="decimal" min="0" placeholder="${attrEsc(t('gate_cash_amount_ph'))}" onclick="event.stopPropagation()">
+      <div class="gate-btns">
+        <button type="button" class="gate-btn-secondary" onclick="event.stopPropagation();closeGateCard()">${htmlEsc(t('confirm_cancel'))}</button>
+        <button type="button" class="gate-btn-primary" onclick="event.stopPropagation();resolveGateCash(${j.id})">${htmlEsc(t('gate_confirm_cash_btn'))}</button>
       </div>
     </div>`;
   }
@@ -5251,6 +5288,7 @@ async function logPackageSession(jobId) {
   const otherUsed = packageUsed(pkg) - ownCount;
   const cap = Math.max(0, (Number(pkg.totalSessions) || 0) - otherUsed);
   j.count = Math.min(cap, ownCount + 1);
+  applyPackageRevenue(j, pkg);
   j.updatedAt = nowISO();
   logEvent('pipeline_pkg_session_logged');
   await dbPut('jobs', j);
@@ -5334,6 +5372,7 @@ async function confirmPackageDelivery(jobId) {
   const val = input ? parseInt(input.value, 10) : NaN;
   if (!(val > 0) || val > remaining) { validatePackageConfirmQty(jobId, remaining); return; }
   j.count = val;
+  if (pkg) applyPackageRevenue(j, pkg);
   await dbPut('jobs', j);
   mirrorJob(j);
   window.__packageConfirmJobId = null;
@@ -5398,33 +5437,72 @@ window.skipJobStage = skipJobStage;
 // Cash-job path: skip Quote in one tap and land straight on Booked, already
 // marked paid — for a session paid in cash on the spot, no client-facing
 // quote is ever needed and there's no separate "money in" step to wait for
-// (TSK-014: paid is a job-level flag, see jobEarned()). Still uses the job's
-// own order (jobOrder(j)), same as everywhere else, so a Settings reorder
-// never strands this on a stage that doesn't precede Booked in that
+// (TSK-014: paid is a job-level flag, see jobEarned()). Opens the Cash gate
+// card (gateCardHtml()'s 'cash' branch) rather than acting immediately —
+// TSK-023 removed Fee from the Add-session form, so this is now the one
+// place a cash job's amount ever gets entered; resolveGateCash() below does
+// the actual stage/paid/amount mutation once that's confirmed. Still uses
+// the job's own order (jobOrder(j)), same as everywhere else, so a Settings
+// reorder never strands this on a stage that doesn't precede Booked in that
 // particular job's chain.
-async function cashJobPath(jobId) {
+function cashJobPath(jobId) {
   const j = jobs.find(x => x.id === jobId);
   if (!j) return;
   const order = jobOrder(j);
   const bookedIdx = order.indexOf('booked');
   const curIdx = order.indexOf(jobStage(j));
   if (bookedIdx < 0 || curIdx < 0 || curIdx >= bookedIdx) return;
-  logEvent('pipeline_stage_skipped:cash_job');
-  j.stage = order[bookedIdx];
+  openGateCard(jobId, 'cash');
+}
+window.cashJobPath = cashJobPath;
+
+// "Mark paid" for a Booked job with no invoice attached: same one-field
+// cash-amount ask as cashJobPath (gateCardHtml()'s 'cash' branch,
+// resolveGateCash() below), but for a job already AT Booked — no stage
+// skip needed, just capture what was actually paid. Kept as a separate
+// entry point from cashJobPath (which requires curIdx < bookedIdx) since
+// this job is, by definition, already there.
+function markPaidNoInvoice(jobId) {
+  const j = jobs.find(x => x.id === jobId);
+  if (!j) return;
+  openGateCard(jobId, 'cash');
+}
+window.markPaidNoInvoice = markPaidNoInvoice;
+
+async function resolveGateCash(jobId) {
+  const j = jobs.find(x => x.id === jobId);
+  if (!j) return;
+  const amountEl = document.getElementById('gate-cash-amount-' + jobId);
+  const amount = amountEl ? (parseFloat(amountEl.value) || 0) : 0;
+  const order = jobOrder(j);
+  const bookedIdx = order.indexOf('booked');
+  const curIdx = order.indexOf(jobStage(j));
+  // Skip straight to Booked only if not already there/past it (the
+  // cashJobPath case, from Inquiry) — markPaidNoInvoice's job is already at
+  // Booked and just needs the amount + paid flag, no stage change.
+  if (bookedIdx >= 0 && curIdx >= 0 && curIdx < bookedIdx) {
+    logEvent('pipeline_stage_skipped:cash_job');
+    j.stage = order[bookedIdx];
+    j.due = null;
+    gateAfterForwardMove(j);
+  }
   j.paid = true;
   j.complete = false;
-  j.due = null;
-  gateAfterForwardMove(j);
+  j.amount = amount;
+  j.tip = 0;
+  j.expense = 0;
+  j.netAmount = amount;
   j.updatedAt = nowISO();
   _pipelineActiveStage = j.stage;
   window.__kbMoved = jobId;
+  window.__gateOpen = null;
   await dbPut('jobs', j);
   mirrorJob(j);
   await reload();
   renderPipeline();
   if (j.pendingGateStage) openGateCard(j.id);
 }
-window.cashJobPath = cashJobPath;
+window.resolveGateCash = resolveGateCash;
 
 // Alt completion for the Deliver stage: the engagement is over without a renewal.
 // Distinct from the primary "Mark extended" action so the completed badge (and
@@ -5557,6 +5635,16 @@ async function markJobPaid(jobId) {
         const wasPaid = inv.status === 'paid';
         inv.status = 'paid'; inv.updatedAt = nowISO();
         await dbPut('invoices', inv);
+        // TSK-023 (money-field removal): Fee/Tip/Expense no longer live on
+        // the job form, so the invoice's own youReceive figure (already
+        // VAT/WHT-aware, computed independently of any job field) becomes
+        // this job's revenue the moment its invoice is actually paid —
+        // Home/the goal card/CSV export all read job.amount/netAmount
+        // unchanged, they just get the right number now.
+        j.amount = Number(inv.youReceive) || 0;
+        j.tip = 0;
+        j.expense = 0;
+        j.netAmount = j.amount;
         // Pass M3-L1: third paid-transition path (direct dbPut, not through
         // invoices.js) — see decrementStockForInvoicePaid's own comment.
         if (!wasPaid && typeof window.decrementStockForInvoicePaid === 'function') {
@@ -6338,8 +6426,7 @@ function togglePackageForm(open, clientId) {
 }
 window.togglePackageForm = togglePackageForm;
 // Prefills the total/price fields from the chosen service's own package
-// numbers (usageQty/rate) — same "pick a template, don't retype it"
-// pattern as onJobServiceChange() prefilling j-amount.
+// numbers (usageQty/rate) — "pick a template, don't retype it."
 function onPkgServiceChange(v) {
   if (!v) return;
   const s = services.find(x => x.id === parseInt(v));

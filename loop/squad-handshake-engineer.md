@@ -1,7 +1,7 @@
 <squad_metadata>
   <squad_name>Engineer-Squad</squad_name>
-  <current_status>BLOCKED_ON_OWNER</current_status>
-  <active_task_id>TSK-023-money-fields</active_task_id>
+  <current_status>IDLE</current_status>
+  <active_task_id>none</active_task_id>
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
@@ -44,12 +44,10 @@ which persona-flavored demo dataset to seed. The persona concept itself
 (businessType/unit-word labeling/i18n variants/client trackers/the
 Settings-side switcher) is untouched, exactly as scoped to onboarding-only
 removal. That closed out every numbered backlog item except the one the
-owner explicitly told the squad to hold: TSK-023's Fee/Tip/Expense/Sessions
-money fields, which need an answer on what replaces `job.netAmount` as
-the revenue computation before any building starts — see Cross-Squad
-Requests below. Also: the new `test` CI gate (deploy-vercel.yml, added
-this arc) had its first real production run and worked exactly as
-designed — see the correction below.
+owner had told the squad to hold: TSK-023's Fee/Tip/Expense/Sessions money
+fields. Also: the new `test` CI gate (deploy-vercel.yml, added this arc)
+had its first real production run and worked exactly as designed — see
+the correction below.
 
 After that, the owner raised a new item straight in chat (not a screenshot
 popup) and it's logged/shipped as **TSK-024**: package-usage deduction
@@ -59,7 +57,21 @@ packages at once could have the wrong one silently applied to a Task-flow
 booking. The owner's own mental model was concrete and unambiguous ("create
 a service with 10x usage at 5,500 THB — booking/delivering it should deduct
 from that"), so this was built directly rather than researched/triaged
-first. See the Recent Commits entry below for the full implementation.
+first.
+
+Finally, the owner asked directly for the squad's own recommendation on
+TSK-023's still-held money fields ("give me direction"). Research turned
+up that `job.netAmount` was barely load-bearing (only tax.js's cash-income
+bucket actually read the stored field — Home/the goal card/CSV export
+already recomputed `amount+tip-expense` live), so the blast radius was
+much smaller than the original researcher_notes assumed. Recommendation
+given and built on "build": Fee/Tip/Expense/Sessions are now gone from
+the Add-session form entirely, and revenue gets attributed at the moment
+it's actually known — from the invoice (once paid), from the package's
+purchase price (apportioned at delivery), or from a new one-field Cash
+gate — rather than typed in at job-creation time. That closes out TSK-023
+completely, and with it the entire backlog: nothing owner-facing remains
+open. See the Recent Commits entry below for the full implementation.
 
 **Correction to this file's own prior record**: the 2026-07-22 entry below
 called check-scheduling.js's occasional "64 passed, 1 failed" a pre-
@@ -217,8 +229,8 @@ pass/fail count.
   check-scheduling.js) — obsolete UI-specific assertions deleted outright,
   no successor for a freeform undated checklist item or step repeat.
   Full battery clean: 15 Node + 33 Playwright suites, 0 failures.
-* PR #78 (open, commit a6db194): **TSK-023** (partial — Fee/Tip/Expense/
-  Sessions held) — removed the Quick log/Full details toggle
+* PR #78 (merged, commit a6db194): **TSK-023 part 1** (Fee/Tip/Expense/
+  Sessions held at the time) — removed the Quick log/Full details toggle
   (`job-mode-seg`/`setJobModalMode()`/`applyJobModalMode()`, every field
   always shown now), "Items on this engagement" (`addJobItem`/
   `removeJobItem` had no other entry point — whole feature retired, not
@@ -266,7 +278,7 @@ pass/fail count.
   suites, 0 failures. This was the last actionable backlog item — every
   TSK is now shipped except the money-field half of TSK-023, held on
   purpose pending an owner answer (see Cross-Squad Requests).
-* PR pending (commit 15f571c): **TSK-024** — raised directly in chat, not a
+* PR #80 (merged, commit 15f571c): **TSK-024** — raised directly in chat, not a
   screenshot popup. `packages` gained a `serviceId` field (previously
   disconnected from the catalog Service entirely — selling a package meant
   a manual "+Add package" step re-typing the same usageQty/rate numbers).
@@ -291,6 +303,42 @@ pass/fail count.
   per-service isolation, a non-package service never offering/creating
   one, and the new tagging. Full battery clean: 15 Node + 34 Playwright
   suites, 0 failures.
+* PR #81 (merged, commit 1de66bc): quick owner-flagged fix, not a numbered
+  backlog item — `.gate-date` (the date pill in the "Session delivered ✓ /
+  Book next session now" gate card) rendered noticeably larger/heavier
+  than the buttons next to it. Tightened padding/font-size/weight, added
+  an explicit line-height. Pure CSS, no test impact.
+* PR pending (commit 79d0f1d): **TSK-023 part 2** — the previously-held
+  money-field half. Research first (owner asked for a direct
+  recommendation): `job.netAmount` turned out to be barely load-bearing
+  (only `tax.js`'s cash-income bucket read the stored field; Home/the goal
+  card/CSV export already recomputed `amount+tip-expense` live), so the
+  blast radius was much smaller than the original researcher_notes
+  assumed — no single choke-point redesign needed. Fee/Tip/Expense/
+  Sessions are now gone from the Add-session form entirely; revenue gets
+  attributed at the moment it's actually known, from whichever of 3
+  sources applies: `markJobPaid()` now syncs `amount`/`netAmount` from the
+  invoice's own `youReceive` the moment an invoice is marked paid (via the
+  existing `onInvoiceMarkedPaid` reverse hook, covering all 3 of
+  invoices.js's paid-transition paths for free); new `applyPackageRevenue()`
+  apportions a package-linked job's share of the package's one-time
+  purchase price (`count/totalSessions * price`) at delivery time, wired
+  into `logPackageSession()`/`confirmPackageDelivery()`/
+  `saveFastPathDelivery()` — this also fixes a real pre-existing gap
+  (`package.price` was write-only before this pass, so package-delivered
+  work silently showed ฿0 revenue everywhere); the Cash job shortcut lost
+  its only input, so `cashJobPath()` now opens a one-field Cash gate
+  (`resolveGateCash()`) instead of acting immediately, and the no-invoice
+  "Mark paid" button routes through the same gate (`markPaidNoInvoice()`)
+  since it has nowhere else money could come from. `saveJob()` now
+  defaults amount/tip/expense/count/netAmount to 0 on a new job and
+  explicitly preserves them on an ordinary detail edit, matching the
+  established subTasks/milestones preserve-on-edit pattern.
+  check-job-modal-v2.js/check-options-lost.js/check-scheduling.js updated
+  for the removed fields and the new Cash-gate flow;
+  check-service-packages.js gained apportionment coverage. Full battery
+  clean: 15 Node + 34 Playwright suites, 0 failures. This was the last
+  open item in the whole backlog — nothing owner-facing remains.
 
 ## Blockers & QA Failures
 (none — no task hit the 3-strike breaker across the whole arc; see the
@@ -319,11 +367,10 @@ produced, caught by CI rather than a strike)
   mid-engagement reminders?") was answered directly — "I don't actually use
   it that way — just remove it" — and shipped in PR #77. No, nothing
   replaces it; the owner confirmed that's fine.
-* Owner: the one remaining open question in the whole backlog — TSK-023's
-  Fee/Tip/Expense/Sessions money fields are still held (see PR #78's entry
-  above). Engineer-Squad will not touch `job.netAmount` or its readers
-  (Insights, tax rollup, package math, Home's earned/net stats) until the
-  owner says what should compute revenue instead.
+* Resolved: TSK-023's Fee/Tip/Expense/Sessions money-field question — the
+  owner asked for the squad's own recommendation directly, it was given,
+  and built on "build" (see the TSK-023 part 2 entry above). No open
+  question remains anywhere in the backlog.
 * Owner (lower priority, noted not urgent): TSK-002's rebuild dropped
   Manage's Invoices/Docs rows from More entirely — verified as a legitimate
   no-op (Home's quick-action row already reaches both, predates this task).

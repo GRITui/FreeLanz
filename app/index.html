@@ -544,8 +544,16 @@
 
     <!-- TSK-023: the Quick log/Full details toggle (TSK-008) is removed per
          the owner — every field below is always shown now. Fee/Tip/Expense/
-         Sessions stay untouched (held, pending a revenue-model replacement;
-         see backlog-inbox.md TSK-023). -->
+         Sessions are gone from this form entirely (also TSK-023, the
+         previously-held half): a job's revenue is no longer captured here
+         at creation time. It's now attributed at the moment money is
+         actually known to have moved, from whichever of 3 sources applies
+         — see app.js: markJobPaid() (invoice.youReceive, synced the moment
+         an invoice is marked paid), applyPackageRevenue() (this delivery's
+         share of the linked package's purchase price), or resolveGateCash()
+         (the Cash job gate's own one-field amount prompt). job.amount/tip/
+         expense/netAmount stay real data fields, just no longer editable
+         from this form — preserved as-is on an ordinary detail edit. -->
 
     <div class="form-section">
       <div class="field">
@@ -566,13 +574,6 @@
       <div id="j-fastpath-confirm" style="display:none"></div>
 
       <div id="j-standard-fields">
-        <div class="form-row">
-          <div class="field-half"><label for="j-amount" data-i18n="field_amount">Fee</label><input type="number" id="j-amount" class="tnum" inputmode="decimal" min="0" placeholder="0" oninput="calcNet()"></div>
-          <div class="field-half"><label for="j-tip" data-i18n="field_tip">Tip</label><input type="number" id="j-tip" class="tnum" inputmode="decimal" min="0" placeholder="0" oninput="calcNet()"></div>
-        </div>
-        <!-- TSK-023: these fields (Service/apply-to-package/Expense/Sessions/
-             Notes) used to hide under Quick log; the toggle is gone now, so
-             they're always shown. -->
         <div class="field" id="j-service-field">
           <label for="j-service" data-i18n="field_service">Service</label>
           <select id="j-service" onchange="onJobServiceChange(this.value)"></select>
@@ -582,20 +583,11 @@
           <input type="checkbox" id="j-apply-package" style="width:20px;height:20px;flex-shrink:0">
           <input type="hidden" id="j-package-id">
         </div>
-        <div class="form-row" id="j-full-row">
-          <div class="field-half"><label for="j-expense" data-i18n="field_expense">Expense</label><input type="number" id="j-expense" class="tnum" inputmode="decimal" min="0" placeholder="0" oninput="calcNet()"></div>
-          <div class="field-half"><label id="j-count-label" for="j-count" data-i18n="field_count">Sessions</label><input type="number" id="j-count" class="tnum" inputmode="numeric" min="0" placeholder="0"></div>
-        </div>
         <div class="field" id="j-notes-field">
           <label for="j-notes" data-i18n="field_notes">Notes</label>
           <textarea id="j-notes" rows="2" data-i18n-ph="field_notes_ph" placeholder="Anything to remember…"></textarea>
         </div>
       </div>
-    </div>
-
-    <div class="net-box">
-      <span class="net-box-label" data-i18n="net_take">Net take</span>
-      <span class="net-box-val tnum" id="j-net">฿0</span>
     </div>
 
     <!-- TSK-023: "Items on this engagement" and "Time tracking" (+ Focus
