@@ -1,11 +1,47 @@
 <squad_metadata>
   <squad_name>Engineer-Squad</squad_name>
-  <current_status>IDLE</current_status>
-  <active_task_id>none</active_task_id>
+  <current_status>EXECUTING</current_status>
+  <active_task_id>TSK-025, TSK-026</active_task_id>
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
-## Current Focus
+## Current Focus (2026-08-05, new auto-improvement epoch)
+Owner-facing backlog (TSK-001..024) was fully shipped/closed as of the prior
+epoch (see entry below). PM opened a new auto-improvement epoch since no
+owner items were pending: seeded TSK-025 (aria-label htmlEsc()->attrEsc()
+consistency fix, app/app.js:5999-6000) and TSK-026 (new regression test,
+tests/test-db-schema-consistency.mjs, guarding IndexedDB store references
+against a missing createObjectStore()). Both built directly on the PM's own
+branch/PR (#83, still open) rather than a separate PR per task, since this
+was one continuous session doing PM+Researcher+Engineer work together.
+
+IMPORTANT CORRECTION made before shipping: TSK-025 was originally triaged
+as a HIGH-severity "verified attribute-injection bug" describing `label` as
+user-entered text. That was wrong -- traced the value back to its source
+and it's a static, developer-authored translation string (STAGE_META's 4
+fixed keys via t()), never reachable by user input. Downgraded to LOW /
+code-hygiene in backlog-inbox.md before the fix shipped. Recorded here so
+future cycles don't repeat the same research shortcut (verify data
+provenance before calling something a live security bug, not just "this
+helper is wrong for this HTML context").
+
+Full test battery run locally (after `npm install` -- node_modules wasn't
+present in this container -- and pointing Playwright at the pre-installed
+browser via `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium`, since the
+pinned playwright devDependency (^1.56.1 resolving to 1.61.1) expects a
+newer bundled Chromium revision than the one baked into this image):
+15 Node harnesses + test-db-schema-consistency.mjs (new) all green, 34 of 35
+Playwright suites green. The one failure, check-demo-data.js (3 of 22
+assertions: trainer/realestate/insurance demo personas show ฿0 on the Home
+hero after seeding), reproduces identically on the pre-TSK-025 base commit
+(confirmed via `git stash` + re-run) -- pre-existing, not caused by this
+epoch's changes. Logged as TSK-027 in backlog-inbox.md (likely TSK-023
+fallout: demo-data seeding wasn't updated when Fee/Tip/Expense were
+replaced by invoice/package/cash-gate-derived revenue). Picking that up
+next in this same session.
+
+---
+
 TSK-018 part (1) shipped (commit cf3eb73, PR #72 merged) — renderPipelineTimeline()
 now also sources dated points from job.due (+ its linked booking), not just
 job.subTasks. The deploy pipeline restructure also shipped (PR #74 merged)
