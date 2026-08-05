@@ -6,7 +6,12 @@ const { chromium } = require('playwright');
   const assert = (cond, msg) => { if (cond) pass++; else { fail++; console.log('FAIL:', msg); } };
 
   // ── Smoke pass: every persona seeds cleanly with zero console errors ──
-  const PERSONAS = ['trainer', 'realestate', 'laundry', 'insurance', 'garage'];
+  // 'kol' was missing here (TSK-028) -- DEMO_PERSONA_DATA/BUSINESS_TYPES
+  // both define 6 seeded personas (trainer/realestate/laundry/insurance/
+  // garage/kol), only 5 were ever exercised. 'custom' has no seed content
+  // by design (see DEMO_PERSONA_DATA's own comment in app.js), so it's
+  // correctly excluded, not missing.
+  const PERSONAS = ['trainer', 'realestate', 'laundry', 'insurance', 'garage', 'kol'];
   for (let i = 0; i < PERSONAS.length; i++) {
     const persona = PERSONAS[i];
     const context = await browser.newContext();
