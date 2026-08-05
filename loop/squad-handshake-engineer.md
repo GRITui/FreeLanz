@@ -5,7 +5,62 @@
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
-## Current Focus
+## Current Focus (2026-08-05, new auto-improvement epoch)
+Owner-facing backlog (TSK-001..024) was fully shipped/closed as of the prior
+epoch (see entry below). PM opened a new auto-improvement epoch since no
+owner items were pending: seeded TSK-025 (aria-label htmlEsc()->attrEsc()
+consistency fix, app/app.js:5999-6000) and TSK-026 (new regression test,
+tests/test-db-schema-consistency.mjs, guarding IndexedDB store references
+against a missing createObjectStore()). Both built directly on the PM's own
+branch/PR (#83, still open) rather than a separate PR per task, since this
+was one continuous session doing PM+Researcher+Engineer work together.
+
+IMPORTANT CORRECTION made before shipping: TSK-025 was originally triaged
+as a HIGH-severity "verified attribute-injection bug" describing `label` as
+user-entered text. That was wrong -- traced the value back to its source
+and it's a static, developer-authored translation string (STAGE_META's 4
+fixed keys via t()), never reachable by user input. Downgraded to LOW /
+code-hygiene in backlog-inbox.md before the fix shipped. Recorded here so
+future cycles don't repeat the same research shortcut (verify data
+provenance before calling something a live security bug, not just "this
+helper is wrong for this HTML context").
+
+Full test battery run locally (after `npm install` -- node_modules wasn't
+present in this container -- and pointing Playwright at the pre-installed
+browser via `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium`, since the
+pinned playwright devDependency (^1.56.1 resolving to 1.61.1) expects a
+newer bundled Chromium revision than the one baked into this image):
+15 Node harnesses + test-db-schema-consistency.mjs (new) all green, 34 of 35
+Playwright suites green. The one failure, check-demo-data.js (3 of 22
+assertions: trainer/realestate/insurance demo personas show ฿0 on the Home
+hero after seeding), reproduces identically on the pre-TSK-025 base commit
+(confirmed via `git stash` + re-run) -- pre-existing, not caused by this
+epoch's changes. Logged as TSK-027 and picked up immediately.
+
+TSK-027 shipped (commit f74036c, PR #83). SECOND correction this epoch:
+the initial TSK-027 write-up guessed "likely TSK-023 fallout" without
+verifying -- also wrong, same mistake pattern as TSK-025's first triage
+(asserting a plausible-sounding cause instead of tracing it). Actual root
+cause, fully traced: Home's hero uses jobsThisMonth(), a hard calendar-
+month filter, and seedDemoData()'s per-persona paid-job daysOffset values
+(-5 to -40) were picked without accounting for "today" being early in a
+month -- today is 2026-08-05 (day 5), so any offset <= -5 silently lands
+in July and drops out. Verified this explains every persona's pass/fail
+individually (trainer/realestate lost ALL paid revenue to the boundary;
+insurance's one in-month paid job happened to be its ฿0 "claim assistance"
+entry; laundry/garage each had one paid job close enough to survive) --
+day-of-month-dependent, not a stable regression, which is likely why it
+went uncaught. Fix: clamp job dates only (not invoices/bookings/packages/
+progressLogs) to never precede the 1st of the current month. Full battery
+re-run clean after the fix: 51/51 suites.
+
+Two corrections in one epoch is a pattern worth naming for future cycles:
+verify provenance/root-cause with actual evidence (trace the value, git
+stash and re-run, whatever it takes) before writing a severity claim or a
+causal story into backlog-inbox.md -- a plausible guess is not a finding.
+
+---
+
 TSK-018 part (1) shipped (commit cf3eb73, PR #72 merged) — renderPipelineTimeline()
 now also sources dated points from job.due (+ its linked booking), not just
 job.subTasks. The deploy pipeline restructure also shipped (PR #74 merged)
