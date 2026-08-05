@@ -1,7 +1,7 @@
 <squad_metadata>
   <squad_name>Engineer-Squad</squad_name>
-  <current_status>EXECUTING</current_status>
-  <active_task_id>TSK-025, TSK-026</active_task_id>
+  <current_status>IDLE</current_status>
+  <active_task_id>none</active_task_id>
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
@@ -35,10 +35,29 @@ Playwright suites green. The one failure, check-demo-data.js (3 of 22
 assertions: trainer/realestate/insurance demo personas show ฿0 on the Home
 hero after seeding), reproduces identically on the pre-TSK-025 base commit
 (confirmed via `git stash` + re-run) -- pre-existing, not caused by this
-epoch's changes. Logged as TSK-027 in backlog-inbox.md (likely TSK-023
-fallout: demo-data seeding wasn't updated when Fee/Tip/Expense were
-replaced by invoice/package/cash-gate-derived revenue). Picking that up
-next in this same session.
+epoch's changes. Logged as TSK-027 and picked up immediately.
+
+TSK-027 shipped (commit f74036c, PR #83). SECOND correction this epoch:
+the initial TSK-027 write-up guessed "likely TSK-023 fallout" without
+verifying -- also wrong, same mistake pattern as TSK-025's first triage
+(asserting a plausible-sounding cause instead of tracing it). Actual root
+cause, fully traced: Home's hero uses jobsThisMonth(), a hard calendar-
+month filter, and seedDemoData()'s per-persona paid-job daysOffset values
+(-5 to -40) were picked without accounting for "today" being early in a
+month -- today is 2026-08-05 (day 5), so any offset <= -5 silently lands
+in July and drops out. Verified this explains every persona's pass/fail
+individually (trainer/realestate lost ALL paid revenue to the boundary;
+insurance's one in-month paid job happened to be its ฿0 "claim assistance"
+entry; laundry/garage each had one paid job close enough to survive) --
+day-of-month-dependent, not a stable regression, which is likely why it
+went uncaught. Fix: clamp job dates only (not invoices/bookings/packages/
+progressLogs) to never precede the 1st of the current month. Full battery
+re-run clean after the fix: 51/51 suites.
+
+Two corrections in one epoch is a pattern worth naming for future cycles:
+verify provenance/root-cause with actual evidence (trace the value, git
+stash and re-run, whatever it takes) before writing a severity claim or a
+causal story into backlog-inbox.md -- a plausible guess is not a finding.
 
 ---
 
