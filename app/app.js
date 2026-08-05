@@ -5996,8 +5996,8 @@ function renderWorkflowControls() {
       <span class="wf-ico">${meta.icon || ''}</span>
       <span class="wf-name">${htmlEsc(label)}</span>
       <span class="wf-btns">
-        <button type="button" class="wf-move" aria-label="Move ${htmlEsc(label)} up" ${i === 0 ? 'disabled' : ''} onclick="wfMove(${i},-1)">↑</button>
-        <button type="button" class="wf-move" aria-label="Move ${htmlEsc(label)} down" ${i === order.length - 1 ? 'disabled' : ''} onclick="wfMove(${i},1)">↓</button>
+        <button type="button" class="wf-move" aria-label="Move ${attrEsc(label)} up" ${i === 0 ? 'disabled' : ''} onclick="wfMove(${i},-1)">↑</button>
+        <button type="button" class="wf-move" aria-label="Move ${attrEsc(label)} down" ${i === order.length - 1 ? 'disabled' : ''} onclick="wfMove(${i},1)">↓</button>
       </span>
     </div>`;
   }).join('');
