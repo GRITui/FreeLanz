@@ -2132,11 +2132,24 @@ async function seedDemoData(persona) {
   }
 
   const stageOrderNow = getStageOrder();
+  // Home's hero number only counts jobs whose date falls in the CURRENT
+  // calendar month (jobsThisMonth(), monthKey()-based, see renderHome()) --
+  // a hard month boundary, not a rolling window. Each persona's paid job
+  // daysOffset was hand-picked (-5 to -40) assuming "today" is late enough
+  // in the month to absorb that; run the demo on/near the 1st-14th and
+  // every offset past -(today's day-of-month) silently lands in the
+  // PREVIOUS month and drops out, so the hero can show ฿0 even though
+  // real, paid revenue was seeded. Clamp job dates only (not
+  // invoices/bookings/packages/progressLogs, which keep their own
+  // historical flavor and aren't read by that filter) so every seeded job
+  // always lands within the current month, regardless of which day of the
+  // month the demo happens to run on.
+  const jobDate = (offsetDays) => relDate(Math.max(offsetDays, -(today.getDate() - 1)));
   for (const j of data.jobs) {
     const client = clientRefs[j.clientIndex];
     const svc = serviceByName[j.serviceName];
     const job = {
-      uid, date: relDate(j.daysOffset), client: client.name, clientId: client.id,
+      uid, date: jobDate(j.daysOffset), client: client.name, clientId: client.id,
       serviceId: svc ? svc.id : null, serviceName: svc ? svc.name : j.serviceName,
       jobType: settings.workType || '', amount: j.amount, tip: j.tip || 0, expense: j.expense || 0,
       count: j.count || 1, notes: j.notes || '', netAmount: j.amount + (j.tip || 0) - (j.expense || 0),
