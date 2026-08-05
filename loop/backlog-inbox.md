@@ -265,3 +265,23 @@ Blast radius the owner should know about before this is scoped: `job.netAmount` 
 Owner's ask, restated: creating a Service with a usage qty > 1 (e.g. "1-on-1 training," 10x, 5,500 THB) should BE the package definition -- booking/delivering that service in Task flow should deduct from that client's balance for that exact service, with no separate manual step.</description>
   <researcher_notes>Built directly (owner gave a clear, concrete spec, not a menu of options) -- see squad-handshake-engineer.md's Recent Commits entry for the full implementation writeup. Nothing held back; no open design question remains on this item.</researcher_notes>
 </task_item>
+
+<task_item>
+  <id>TSK-025</id>
+  <source>RESEARCHER_SQUAD</source>
+  <status>READY_FOR_PM</status>
+  <priority>HIGH</priority>
+  <title>Fix attribute-injection bug: htmlEsc() used in an aria-label attribute at two sites; audit the other ~284 htmlEsc() call sites for the same class</title>
+  <description>Verified directly in code (not from a screenshot): app/app.js:5999-6000 build `aria-label="Move ${htmlEsc(label)} up"` / `"...down"` where `label` is user-entered free text (a task/service/product name). Per the shared knowledge base's known-issue #4 (a real CodeQL finding fixed earlier this project: "htmlEsc() (doesn't escape double quotes) was used in an attribute context where attrEsc() was required"), htmlEsc() leaves `"` unescaped -- if `label` contains a `"`, it breaks out of the aria-label attribute and lets an attacker-controlled string inject arbitrary additional attributes onto that DOM element (e.g. an event-handler attribute), on any screen that renders a user-typed name into this button. attrEsc() is already the established fix for exactly this pattern (42 existing call sites in app/app.js use it correctly).</description>
+  <researcher_notes>A quick regex sweep (`grep -noE '[a-zA-Z-]+="[^"]*\$\{htmlEsc\([^}]*\)\}[^"]*"' app/app.js`) found exactly these 2 confirmed hits out of 286 total htmlEsc() calls, but the regex only catches a value that is a single htmlEsc()-wrapped template expression sitting alone inside a double-quoted attribute -- it will miss concatenated/multi-token attribute values, single-quoted attributes, and the same pattern in tax.js/invoices.js/docgen.js/bookings.js/followups.js/portfolio.js/research.js (not scanned yet). Recommend Engineer-Squad fix the 2 confirmed sites first (small, mechanical, swap htmlEsc->attrEsc, matches the existing 42-site pattern exactly -- low risk), then do a fuller manual/regex pass across all modules for siblings before closing this out, since this is precisely the bug class a prior CodeQL audit already caught one instance of.</researcher_notes>
+</task_item>
+
+<task_item>
+  <id>TSK-026</id>
+  <source>RESEARCHER_SQUAD</source>
+  <status>READY_FOR_PM</status>
+  <priority>MEDIUM</priority>
+  <title>Add a regression test guarding IndexedDB store/DB_VER consistency</title>
+  <description>Confirmed: no file under tests/ (`test-*.mjs` or `check-*.js`) asserts that every IndexedDB store name referenced anywhere in app/app.js (via `.objectStore('name')` / `db.transaction([...])`) has a matching `createObjectStore('name', ...)` call reachable from the `onupgradeneeded` migration ladder keyed off `DB_VER` (app/app.js:33, currently 7). This is exactly the bug class in the shared knowledge base's known-issue #6: "IndexedDB version-bump gap -- M2 stores were added without bumping DB_VER, so onupgradeneeded never re-fired for existing DBs" -- a real past incident, fixed once by hand, with no guard against recurring.</description>
+  <researcher_notes>Proposed shape: a Node test (matching the existing `tests/test-*.mjs` style) that statically extracts store names from both call sites via regex/string parsing of app/app.js, and asserts the two sets match (every referenced store has a creator, every created store is referenced). Pure static-analysis test, no browser/IndexedDB runtime needed -- should be fast to add and cheap to keep in the `test` CI gate (deploy-vercel.yml) alongside the rest of tests/run-all.sh. No current bug is known to exist today; this is a guard against a recurrence, not a fix for a live defect -- fine to schedule after TSK-025.</researcher_notes>
+</task_item>
