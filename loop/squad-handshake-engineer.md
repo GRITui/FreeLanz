@@ -5,7 +5,35 @@
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
-## Current Focus (2026-08-05, new auto-improvement epoch)
+## Current Focus (2026-08-05, epoch 2 -- PR #83 merged, this is the follow-up)
+TSK-025/026/027 (epoch 1, see entry below) merged to main via PR #83. This
+second auto-improvement pass re-synced to main, then searched further:
+checked whether jobsThisMonth() (TSK-027's root cause) has other consumers
+that could show the same demo-time ฿0 symptom -- confirmed no, since the
+fix lives in seedDemoData() itself (the seed source), covering every
+consumer automatically, not just Home's hero. Checked dataClient.js's
+documented partial-mirror-coverage limitation -- confirmed intentional,
+already well-explained in its own header comment, not a bug (learned this
+lesson the hard way in epoch 1 with TSK-025/027's two overclaimed guesses
+-- read the design rationale before flagging something as broken). Swept
+app/*.js for user-controlled text interpolated into HTML with NO escaping
+at all (a more severe class than TSK-025's wrong-helper mistake) -- found
+3 candidate sites, traced all 3 and confirmed each is actually safe
+(wrapped downstream, or consumed via .textContent/already-escaped
+attrEsc()) -- a clean negative result, no fix needed.
+
+Landed on TSK-028 instead: DEMO_PERSONA_DATA/BUSINESS_TYPES both define 6
+seeded personas, but tests/check-demo-data.js's PERSONAS array only ever
+tested 5 -- 'kol' had zero coverage, including for the TSK-027 failure
+mode. Added it (one-line fix, the test loop already derives modal row
+index from array position). Verified kol passes cleanly, which also
+confirms TSK-027's seed-source fix generalizes to a persona never
+explicitly checked before. tests/check-demo-data.js: 25/25 (was 22/22).
+Full battery: 51/51 suites clean. Shipped directly: commit 9ac0c83.
+
+---
+
+## Current Focus (2026-08-05, epoch 1 -- superseded by the entry above)
 Owner-facing backlog (TSK-001..024) was fully shipped/closed as of the prior
 epoch (see entry below). PM opened a new auto-improvement epoch since no
 owner items were pending: seeded TSK-025 (aria-label htmlEsc()->attrEsc()
