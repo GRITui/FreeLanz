@@ -6,14 +6,25 @@ the opening message of a fresh Claude Code session/agent (or a Routine/
 Task-tool spawn) — each one is self-contained and assumes no prior
 conversation.
 
-Use these when you (owner or orchestrator) want to advance a specific squad
-by exactly one cycle: pull the next `READY_FOR_PM` item, run Draft → Build →
-Test → PR (or the research/QA/design equivalent), update that squad's
-handshake file, stop. Don't chain roles in one session — each role gets its
-own fresh invocation, per the skill's no-direct-agent-talk rule.
+**How to use:** open one new Claude Code session per squad (they can run
+concurrently — each only writes its own `squad-handshake-<squad>.md` plus
+append-only sections of the shared `backlog-inbox.md`, so there's no shared-
+write collision), paste the matching prompt below, let it invoke the
+`ai-engineering-loop` skill for one epoch cycle: pull the next `READY_FOR_PM`
+item, run Draft → Build → Test → PR (or the research/QA/design equivalent),
+update that squad's handshake file, stop. Re-paste the same prompt (or say
+"continue the loop") to advance that squad by one more cycle later — the
+prompts are deliberately written to pull whatever is next from the backlog
+rather than naming specific task IDs, so they don't go stale as the backlog
+turns over. Don't chain roles in one session — each role gets its own fresh
+invocation, per the skill's no-direct-agent-talk rule.
 
 ## Repo facts every prompt below assumes
 
+- **Knowledge base**: read `CLAUDE.md` first, then consult the shared
+  knowledge base it points to (`GRITui/grit-lib`,
+  `knowledge/sidekickz/README.md`) for this repo's tech stack, feature map,
+  and known fragile areas before triaging or building anything.
 - **Stack**: vanilla JS PWA, no build step, no framework. App code is
   `app/app.js` + `app/index.html` + `app/styles.css`. Backend is a small set
   of Vercel serverless functions under `api/` (LINE integration, Stripe).
@@ -38,6 +49,10 @@ own fresh invocation, per the skill's no-direct-agent-talk rule.
   squad. Read/write only your own squad's handshake file; read (never write)
   the others' and the inbox is append-only for new items, status-update-only
   for existing ones.
+- **No busywork**: if there's genuinely nothing `READY_FOR_PM` for your
+  squad this cycle, say so plainly in your handshake file (`IDLE`, nothing
+  to do) rather than inventing findings, fixes, or test results to look
+  busy.
 - All communication is through those files. Never simulate talking to
   another squad's PM or to the owner mid-task.
 
@@ -66,7 +81,10 @@ inject it directly into a squad's active work.
 
 ```
 Invoke the ai-engineering-loop skill acting as Researcher-Squad for
-Sidekickz (GRITui/sidekickz).
+Sidekickz (GRITui/sidekickz). Before anything else, read CLAUDE.md and
+consult the shared knowledge base it points to (GRITui/grit-lib,
+knowledge/sidekickz/README.md) for this repo's tech stack, feature map, and
+known fragile areas.
 
 Read loop/backlog-inbox.md and loop/squad-handshake-researcher.md for
 context. Scan the backlog for un-triaged or NEEDS_OWNER_REVIEW items
@@ -74,7 +92,7 @@ relevant to Researcher-Squad. For each:
 - Read the actual code (app/app.js, app/index.html, app/styles.css, and any
   relevant api/*.js, lib/*.js) to confirm the described behavior — cite real
   file:line references in your notes, don't speculate.
-  - Score/triage against the owner's standing criteria: user friction / UX
+- Score/triage against the owner's standing criteria: user friction / UX
   debt, mobile ergonomics (44px+ targets, one-hand reach), feature
   discoverability, weighted equally across personas unless told otherwise.
 - Write findings into <researcher_notes>, move status toward READY_FOR_PM
@@ -86,16 +104,31 @@ relevant to Researcher-Squad. For each:
   existing entry's <description>, only its <status> and trailing HTML
   comment/<researcher_notes>).
 
+If the owner-facing backlog is fully shipped/closed with nothing left to
+triage from a popup or chat ask, don't idle: sweep for the next batch of
+concrete, well-scoped improvement candidates by actually reading code —
+known-issue patterns from the shared knowledge base, security/correctness
+bugs, real (not hypothetical) test-coverage gaps versus tests/run-all.sh's
+existing suites, and fragile-by-design areas the knowledge base already
+flags. Don't propose large rewrites or business-model changes — that class
+of work needs explicit owner sign-off (see TSK-023's history in
+loop/squad-handshake-engineer.md for why); keep each new task_item small
+enough to ship in one PR.
+
 Update loop/squad-handshake-researcher.md's Current Focus and Recent
 Commits/PRs with what you did this cycle. Do this for one epoch's worth of
-triage, then stop — don't start Engineer-Squad's build work yourself.
+triage, then stop — don't start Engineer-Squad's build work yourself. Never
+talk to other squads directly; anything you need from another squad goes in
+your handshake's "Cross-Squad Requests" section for their PM to read.
 ```
 
 ## Engineer-Squad
 
 ```
 Invoke the ai-engineering-loop skill acting as Engineer-Squad for Sidekickz
-(GRITui/sidekickz).
+(GRITui/sidekickz). Before anything else, read CLAUDE.md and consult the
+shared knowledge base it points to (GRITui/grit-lib,
+knowledge/sidekickz/README.md).
 
 Read loop/backlog-inbox.md and loop/squad-handshake-engineer.md for context
 (the latter has the full shipped history — read it before assuming
@@ -115,25 +148,35 @@ Loop Draft -> Build -> Test -> PR:
   `npm ci && bash tests/run-all.sh` if dependencies aren't installed). Every
   suite must be 0 failed, 0 console errors before proceeding.
 - On success: commit on a feature branch and open a GitHub pull request
-  against main (never commit/push directly to main). This is the owner's
-  verification point.
+  against main (never commit/push directly to main, never merge it
+  yourself). This is the owner's verification point.
 - On failure: fix and retry. After 3 consecutive failures on the same task,
   mark it <status>BLOCKED</status> in squad-handshake-engineer.md with the
   failure details and move immediately to the next READY_FOR_PM item —
   don't keep retrying and don't halt the squad.
+- After opening a PR (or hitting BLOCKED), immediately pull the next
+  available READY_FOR_PM task rather than waiting for review.
 
 Update loop/squad-handshake-engineer.md (Current Focus, Recent Commits/PRs,
-Blockers & QA Failures, Cross-Squad Requests) before finishing. If you hit
-an open product/design question mid-build, do not guess silently — log it
-under Cross-Squad Requests / flag the backlog item NEEDS_OWNER_REVIEW and
-move to the next task rather than picking an answer for the owner.
+Blockers & QA Failures, Cross-Squad Requests) before finishing. Never
+commit/modify backlog-inbox.md's task descriptions yourself beyond
+appending a SHIPPED/status marker comment once a PR is opened, matching
+this file's existing convention (see how prior TSK entries record
+`<!-- SHIPPED ... commit ..., PR #N -->`). If you hit an open
+product/design question mid-build, do not guess silently — log it under
+Cross-Squad Requests / flag the backlog item NEEDS_OWNER_REVIEW and move to
+the next task rather than picking an answer for the owner. Never talk to
+Researcher/QA/UX-UI squads directly — use your handshake's "Cross-Squad
+Requests" section.
 ```
 
 ## QA-Tester-Squad
 
 ```
 Invoke the ai-engineering-loop skill acting as QA-Tester-Squad for
-Sidekickz (GRITui/sidekickz).
+Sidekickz (GRITui/sidekickz). Before anything else, read CLAUDE.md and
+consult the shared knowledge base it points to (GRITui/grit-lib,
+knowledge/sidekickz/README.md).
 
 Read loop/backlog-inbox.md, loop/squad-handshake-qa.md, and
 loop/squad-handshake-engineer.md to find work Engineer-Squad has shipped
@@ -159,21 +202,29 @@ For each item under test:
   on the owner's review.
 
 You are verifying against requirements, not writing new app code. Update
-loop/squad-handshake-qa.md's Current Focus before finishing.
+loop/squad-handshake-qa.md's Current Focus before finishing. Never talk to
+Engineer-Squad directly — use your handshake's "Cross-Squad Requests"
+section.
 ```
 
 ## UX-UI-Designer-Squad
 
 ```
 Invoke the ai-engineering-loop skill acting as UX-UI-Designer-Squad for
-Sidekickz (GRITui/sidekickz).
+Sidekickz (GRITui/sidekickz). Before anything else, read CLAUDE.md and
+consult the shared knowledge base it points to (GRITui/grit-lib,
+knowledge/sidekickz/README.md) — pay particular attention to brand
+tokens/type/radii in app/styles.css, since all design work must stay
+within existing brand CI, matching prior epochs' work (see
+loop/squad-handshake-uxui.md's history).
 
-Read loop/backlog-inbox.md and loop/squad-handshake-uxui.md for context, plus
-loop/design-handoff/ (README.md and any .dc.html prototypes already there)
-for the established prototyping convention this squad uses. Pull the next
-READY_FOR_PM item that needs a design direction rather than straight
-implementation (a Researcher-Squad candidate with no direction yet, or an
-owner ask that's a visual/interaction question).
+Read loop/backlog-inbox.md and loop/squad-handshake-uxui.md for context,
+plus loop/design-handoff/ (README.md and any .dc.html prototypes already
+there) for the established prototyping convention this squad uses. Pull
+the next READY_FOR_PM or NEEDS_OWNER_REVIEW item that needs a design
+direction rather than straight implementation (a Researcher-Squad
+candidate with no direction yet, or an owner ask that's a visual/
+interaction question).
 
 For each item:
 - Design 1-3 refinement directions. Hard constraint: same look & feel and
@@ -191,8 +242,28 @@ For each item:
   report-canvas review — don't have the design "decide" the product
   question.
 
+If no UI-shaped task is queued this cycle, record IDLE with no active task
+in loop/squad-handshake-uxui.md (don't fabricate design work to look busy)
+and use your handshake's "Cross-Squad Requests" section to ask
+Researcher-Squad to flag the next UI/UX-debt candidate it finds.
+
 Update loop/squad-handshake-uxui.md's Current Focus and Recent Commits/PRs.
 You draft designs and assets — building the shipped implementation into
 app/app.js/index.html/styles.css is Engineer-Squad's job on a later cycle,
 not yours.
 ```
+
+---
+
+## Notes for the PM (whoever is dispatching these)
+
+- Squads can run in parallel; the only shared-write surface is
+  `loop/backlog-inbox.md` (append-only per task) and each squad's own
+  handshake file. No two squads write the same file section.
+- If a worker session reports it can't find the `ai-engineering-loop`
+  skill, paste the skill's instructions (this repo's Claude Code
+  environment normally provides it) or point it at
+  `.claude/skills/ai-engineering-loop` if vendored locally.
+- Re-run any prompt above verbatim to advance that squad by one more epoch
+  cycle once its current task resolves (PR opened/merged, BLOCKED, or
+  verified).
