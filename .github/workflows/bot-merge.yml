@@ -1,0 +1,75 @@
+name: Bot merge (trusted lanes)
+
+# Autonomous merge lane for agent-authored PRs. When a PR qualifies, this
+# runs the FULL regression battery against the PR's own HEAD and squash-
+# merges if everything is green — no human click needed. Qualifying means
+# ALL of:
+#   - base branch is main
+#   - PR author is GRITui (the owner account the agents act for)
+#   - head branch starts with grade-a/          <- widen deliberately, see below
+#
+# Deliberately NOT keyed to Vercel's `deploy-preview` or branch protection:
+# this repo has neither required checks nor protection rules on main, so a
+# plain `gh pr merge --squash` with the workflow's GITHUB_TOKEN is enough —
+# no repo-settings changes required to adopt this.
+#
+# Safety properties:
+#   - The battery runs on EVERY synchronize event, so the merge decision
+#     always reflects the latest commit on the PR (never stale green).
+#   - Non-qualifying PRs skip the job entirely (the `if` gates the whole
+#     job, not just steps).
+#   - Kill switch: disable/remove this file, or rename the head prefix
+#     convention — non-matching branches are invisible to this lane.
+#   - To widen trust later (more prefixes / other author logins), edit the
+#     `if:` below — each added prefix is a deliberate, reviewable decision.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: botmerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  battery-and-merge:
+    if: >-
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.user.login == 'GRITui' &&
+      startsWith(github.event.pull_request.head.ref, 'grade-a/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write       # merge into main
+      pull-requests: write  # comment on the PR while doing so
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Same Chromium-resolution contract as deploy-vercel.yml's test job:
+      # leave PLAYWRIGHT_CHROMIUM_PATH unset and let the scripts find the
+      # browser this step installs.
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Full regression battery
+        run: bash tests/run-all.sh
+
+      - name: Squash-merge the PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" \
+            --body "Battery green on $(git rev-parse --short HEAD) — auto-merging (bot-merge lane)."
+          gh pr merge "$PR_NUMBER" --squash --delete-branch
