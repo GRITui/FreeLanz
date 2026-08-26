@@ -10,8 +10,8 @@ squads are dispatched. Sprint cadence: every 6 hours. See
 
 ## Standup #1 — 2026-08-26
 
-**Backlog (`loop/backlog-inbox.md`)**: 28 task_items total. 24 SHIPPED
-(TSK-002, 007-014, 016-028). 4 non-shipped are all superseded/umbrella
+**Backlog (`loop/backlog-inbox.md`)**: 28 task_items total. 22 SHIPPED
+(TSK-002, 007-014, 016-028). 6 non-shipped are all superseded/umbrella
 entries with no standalone action left (TSK-001 initial triage superseded
 by TSK-002-006; TSK-003-006 superseded by their refined TSK-008-011;
 TSK-015 is the owner's umbrella approval, fully covered by the shipped
