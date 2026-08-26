@@ -355,7 +355,7 @@ CORRECTION (2026-08-05, caught before shipping): this task_item originally guess
 <task_item>
   <id>TSK-033</id>
   <source>RESEARCHER_SQUAD</source>
-  <status>READY_FOR_PM</status>
+  <status>READY_FOR_PM</status><!-- SHIPPED by Engineer-Squad 2026-08-26: PR #92 (open, branched from researcher-squad/epoch3-launch-polish-sweep / PR #91, not yet merged). See squad-handshake-engineer.md. -->
   <priority>HIGH</priority>
   <title>api/stripe-webhook.js's handler logic (status mapping + reconciliation) has zero test coverage</title>
   <description>`tests/test-stripe-webhook.mjs` only imports `verifyStripeWebhook` from lib/stripe.js (signature verification) -- it never imports or calls the default `handler` export from api/stripe-webhook.js itself. Confirmed by grep: zero hits for `handler(`, `mapStripeStatus`, or `SUBSCRIPTION_EVENTS` in the test file. The untested logic includes `mapStripeStatus()` (api/stripe-webhook.js:51-56, collapses Stripe's `incomplete`/`paused`/etc. statuses into `canceled`) and the out-of-order-webhook-delivery reconciliation path (:78-127, calls `subscriptions.retrieve` with a fallback to the event payload on failure, then writes `plan`/`team_seats`/`current_period_end` to the DB gated on whether `sub.metadata.plan` is present). A regression in either could silently downgrade or fail to lock out non-paying accounts (revenue leak) or incorrectly lock out paying ones, and would ship with the full test battery green since nothing exercises this code path today.</description>

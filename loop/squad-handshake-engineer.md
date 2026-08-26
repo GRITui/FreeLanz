@@ -5,6 +5,65 @@
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
+## Current Focus (2026-08-26, ad-hoc single-item cycle -- TSK-033)
+Started this cycle checked out on `researcher-squad/epoch3-launch-polish-sweep`
+(PR #91, open/green/mergeable, backlog-only diff adding TSK-029..046 --
+not yet merged to main). Read this file's full shipped history plus
+loop/backlog-inbox.md's TSK-029..046 before picking anything, per the
+ad-hoc cycle's own instruction not to repeat old research.
+
+Picked **TSK-033** (api/stripe-webhook.js's handler logic -- status
+mapping + out-of-order-delivery reconciliation -- had zero test coverage)
+over its two HIGH-priority siblings TSK-034/035 the epoch-3 cross-squad
+note also recommended sequencing first: this is the most directly
+revenue-critical of the three (a regression here can silently downgrade
+or fail to lock out a subscription), and picking one was required by this
+cycle's single-item scope. TSK-034 (billing-checkout/portal) and TSK-035
+(auth-login anti-enumeration/rate-limit) are untouched, still READY_FOR_PM,
+next in line for a future cycle.
+
+Confirmed before building: the original researcher_notes proposed feeding
+the handler "a fake db() and a stubbed stripeClient().subscriptions.retrieve",
+but api/stripe-webhook.js's `handler` was a bare `export default async
+function handler(request)` that imported `db`/`stripeClient` directly at
+module scope -- no injection seam existed, unlike api/booking-requests.js
+and api/cron-reminders.js, which already use a `createXHandler(opts)`
+factory with an `opts.getSql || db` seam for exactly this reason (see
+booking-requests.js's own comment: "same opts.getSql seam
+lib/crudHandler.js established"). Rather than reach for module-mocking (no
+framework/mocking library in this codebase, correctly per its own
+no-build-step philosophy), refactored stripe-webhook.js to the same
+established `createStripeWebhookHandler({getSql, verifyWebhook,
+getStripeClient})` factory shape -- zero behavior change (verified via the
+full battery below), `export default createStripeWebhookHandler()` keeps
+production wiring identical. Also exported `mapStripeStatus` directly
+(matching lib/db.js's own precedent of exporting an internal helper
+specifically so tests can assert it standalone).
+
+Extended tests/test-stripe-webhook.mjs (kept the existing 4
+signature-verification assertions against the real `verifyStripeWebhook`
+untouched) with 34 new assertions against the new factory + an in-memory
+fake sql + injected verify/Stripe-client stubs: `mapStripeStatus`'s full
+mapping table (including the three unmapped-Stripe-state-treated-as-locked
+cases); method/secret/signature gating; a non-subscription event type never
+touching the DB or Stripe; the out-of-order-delivery reconciliation path
+proven end-to-end (a stale event payload's status is discarded in favor of
+the freshly-retrieved Stripe state); reconciliation-fetch-failure falling
+back to the event payload rather than dropping the update;
+`subscription.deleted` correctly skipping reconciliation entirely; both the
+plan-present and no-metadata-plan DB-write branches; quantity/team_seats
+extraction including the no-`items`-array edge case; and a DB write failure
+being caught, logged, and still acking 200 rather than throwing (so Stripe
+doesn't retry-storm). tests/test-stripe-webhook.mjs: 38/38 (was 4/4). Full
+battery re-run clean: 15 Node harnesses + 34 Playwright suites, 0 failures,
+0 console errors (Playwright run required `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-
+browsers/chromium` against the pre-installed sandbox Chromium, same
+container quirk this file's epoch-1 entry below already documented --
+`bash tests/run-all.sh` alone starts the static servers fine but doesn't
+itself export that env var, so it must be set on the same invocation).
+
+---
+
 ## Current Focus (2026-08-05, epoch 2 -- PR #83 merged, this is the follow-up)
 TSK-025/026/027 (epoch 1, see entry below) merged to main via PR #83. This
 second auto-improvement pass re-synced to main, then searched further:
@@ -173,6 +232,16 @@ assertion failed" — always read the actual FAIL: message, not just the
 pass/fail count.
 
 ## Recent Commits / PRs
+* PR #92 (open, branch `engineer-squad/tsk-033-stripe-webhook-tests`, based on
+  the not-yet-merged `researcher-squad/epoch3-launch-polish-sweep` /
+  PR #91): **TSK-033** -- api/stripe-webhook.js refactored to the
+  `createStripeWebhookHandler({getSql, verifyWebhook, getStripeClient})`
+  DI-factory shape already established by api/booking-requests.js /
+  api/cron-reminders.js, unblocking real handler-level testing;
+  tests/test-stripe-webhook.mjs grew from 4 to 38 assertions covering
+  `mapStripeStatus`'s full table, the out-of-order-delivery reconciliation
+  path, both DB-write branches, and the DB-write-failure fallback. Full
+  battery clean: 15 Node + 34 Playwright suites, 0 failures.
 * PR #64 (merged): TSK-014 stage migration (6→4 stages) + LINE Login deferral.
 * PR #65 (merged): design_handoff_sidekick_refinements batch — TSK-012/013/011,
   TSK-002/007, TSK-009, TSK-008, TSK-010. Playwright 840/840 across 33 suites
