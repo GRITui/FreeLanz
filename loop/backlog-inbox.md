@@ -355,7 +355,7 @@ CORRECTION (2026-08-05, caught before shipping): this task_item originally guess
 <task_item>
   <id>TSK-033</id>
   <source>RESEARCHER_SQUAD</source>
-  <status>READY_FOR_PM</status>
+  <status>READY_FOR_PM</status><!-- SHIPPED by Engineer-Squad 2026-08-26: PR #92 (open, branched from researcher-squad/epoch3-launch-polish-sweep / PR #91, not yet merged). See squad-handshake-engineer.md. -->
   <priority>HIGH</priority>
   <title>api/stripe-webhook.js's handler logic (status mapping + reconciliation) has zero test coverage</title>
   <description>`tests/test-stripe-webhook.mjs` only imports `verifyStripeWebhook` from lib/stripe.js (signature verification) -- it never imports or calls the default `handler` export from api/stripe-webhook.js itself. Confirmed by grep: zero hits for `handler(`, `mapStripeStatus`, or `SUBSCRIPTION_EVENTS` in the test file. The untested logic includes `mapStripeStatus()` (api/stripe-webhook.js:51-56, collapses Stripe's `incomplete`/`paused`/etc. statuses into `canceled`) and the out-of-order-webhook-delivery reconciliation path (:78-127, calls `subscriptions.retrieve` with a fallback to the event payload on failure, then writes `plan`/`team_seats`/`current_period_end` to the DB gated on whether `sub.metadata.plan` is present). A regression in either could silently downgrade or fail to lock out non-paying accounts (revenue leak) or incorrectly lock out paying ones, and would ship with the full test battery green since nothing exercises this code path today.</description>
@@ -365,7 +365,7 @@ CORRECTION (2026-08-05, caught before shipping): this task_item originally guess
 <task_item>
   <id>TSK-034</id>
   <source>RESEARCHER_SQUAD</source>
-  <status>READY_FOR_PM</status>
+  <status>READY_FOR_PM</status><!-- SHIPPED by Engineer-Squad 2026-08-26: commit d36c30e, PR #94 (open). Both handlers refactored to the createXHandler({getSql, getStripeClient}) injection shape (matching TSK-033's PR #92); new tests/test-billing.mjs, 33/33 passing. Full battery clean: 17 Node + 34 Playwright suites, 0 failures. See squad-handshake-engineer.md. -->
   <priority>HIGH</priority>
   <title>api/billing-checkout.js and api/billing-portal.js have no coverage in the actual CI-run test battery</title>
   <description>api/billing-checkout.js's only reference anywhere in tests/ is tests/smoke-live.mjs:136-139 -- and smoke-live.mjs requires a live deployment and is explicitly excluded from tests/run-all.sh's globs (`test-*.mjs`/`check-*.js`), so this endpoint has zero coverage in the battery that actually gates deploys. api/billing-portal.js has literally zero references anywhere in tests/ (grep confirms). Risky untested logic: billing-checkout.js's plan/price-ID selection and success/cancel URL construction (built via lib/cors.js's `appUrl()`, itself also untested -- see the companion cors.js task_item); billing-portal.js's owner-only gate (`isAccountOwner`, :43-53) and the `no_customer` 409 branch for an account with no stored `stripe_customer_id`. A regression in either ships undetected by the regular test run: a broken checkout URL silently breaks the paid-upgrade funnel, or a broken owner-only gate could let a team member (staff/admin) reach the billing portal.</description>
