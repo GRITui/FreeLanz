@@ -232,7 +232,7 @@ assertion failed" — always read the actual FAIL: message, not just the
 pass/fail count.
 
 ## Recent Commits / PRs
-* PR pending (branch `engineer-squad/tsk-033-stripe-webhook-tests`, based on
+* PR #92 (open, branch `engineer-squad/tsk-033-stripe-webhook-tests`, based on
   the not-yet-merged `researcher-squad/epoch3-launch-polish-sweep` /
   PR #91): **TSK-033** -- api/stripe-webhook.js refactored to the
   `createStripeWebhookHandler({getSql, verifyWebhook, getStripeClient})`
