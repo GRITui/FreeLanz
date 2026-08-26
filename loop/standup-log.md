@@ -168,3 +168,101 @@ UX-UI-Designer-Squad this cycle — QA has nothing new to verify yet
 (TSK-034/PR #94 verification can wait for the Advisor's read or next
 cycle's QA pass), and there's no UI-shaped or empty-backlog condition
 calling for the other two.
+
+**Post-standup-3 activity**: TSK-035 (PR #96) shipped and merged,
+completing the stripe/billing/auth test-coverage trio. The Advisor's
+merge-conflict resolution on PR #94 used a hand-built `git commit-tree`
+"merge commit" whose tree only contained PR #94's own lineage — it never
+incorporated PR #92's already-merged `api/stripe-webhook.js` changes,
+so squash-merging it silently **reverted TSK-033 back out of main**. The
+same Advisor session caught this itself, root-caused it, and shipped
+**PR #97** (merged) restoring the reverted files, verified byte-identical
+to PR #92's original content. It also avoided repeating the mistake on
+PR #95 (closed it, rebuilt cleanly as **PR #98** instead of reusing the
+same flawed base). A follow-up Advisor pass, briefed explicitly on the
+`commit-tree` hazard (use a real `git merge`, never fabricate a merge
+tree by hand), reviewed and merged #96 and confirmed #98 already merged.
+**End state verified clean**: zero open PRs, `main`'s `api/stripe-webhook.js`
+confirmed (via direct `git show`) to have the correct post-TSK-033
+content. Lesson carried forward into every future Advisor prompt.
+
+---
+
+## Standup #4 — 2026-08-26 (~12:39 UTC, scheduled)
+
+**Backlog (`loop/backlog-inbox.md`)**: 46 task_items total. 25 shipped
+(22 as of standup 1, plus TSK-033/034/035 this arc). 15 items from epoch 3
+remain fully untouched: TSK-029/030/031/032 (HIGH — perf, IndexedDB-
+rejection reliability, modal focus management, i18n leak onto a real
+Thai invoice), TSK-036-046 minus 033/034/035 (11 MEDIUM/LOW items).
+
+**Open PRs**: none — sprint 3 ended clean (verified above).
+
+**Squad status**: Engineer-Squad active this arc (TSK-033/034/035 all
+shipped); handshake file otherwise unchanged since standup 1's history.
+QA-Tester-Squad idle since its TSK-033 verification. Researcher-Squad and
+UX-UI-Designer-Squad both idle, unchanged.
+
+**Cross-squad requests addressed to Owner**: none new. TSK-036's
+non-blocking grandfathering sub-question (standup 2) still outstanding,
+still not urgent.
+
+**Rate-limit check**: `allowed_warning` (7-day window) — unchanged across
+all four standups so far, not worsening.
+
+**PM decision — sprint 4 priority**: Dispatch **Engineer-Squad** for
+**TSK-029** (Clients screen search: undebounced full re-render + fresh
+IndexedDB re-scan on every keystroke, ~1.5-2M array iterations) — the
+top-ranked remaining HIGH item per Researcher-Squad's own sequencing
+(perf first, then TSK-030/031 a11y/reliability, then TSK-032 i18n). Skip
+QA-Squad this cycle (nothing open to verify until Engineer-Squad's PR
+lands). Skip Researcher-Squad and UX-UI-Designer-Squad — backlog has 15
+untouched actionable items, still nothing UI-direction-shaped among them.
+Dispatch one **PR Advisor** session at cycle end to review/merge this
+cycle's PRs (the standup log PR plus TSK-029's), briefed again on the
+`commit-tree` merge-conflict hazard from sprint 3.
+
+**Post-standup-4 activity**: The standup-4 log PR (**#99**) opened as
+planned, but the Advisor pass I'd committed to dispatching "once this
+cycle's PRs are open" never actually got spawned before this session's
+attention moved elsewhere — a real process miss, not a squad failure.
+Engineer-Squad delivered **PR #100** (TSK-029: 150ms debounce on the
+Clients search render, jobs/packages grouped into clientId-keyed Maps
+once per `reload()` instead of O(n) filters per render, in-flight-request
+dedup for `computeClientsNeedingAttention()`, a render-token guard against
+stale overwrites; full battery green, new Playwright coverage asserting
+the debounce itself). Both #99 and #100 sat open, unreviewed, until this
+standup caught it.
+
+---
+
+## Standup #5 — 2026-08-26 (~18:34 UTC, scheduled)
+
+**Backlog (`loop/backlog-inbox.md`)**: unchanged at 46 task_items, 25
+shipped. TSK-029 (PR #100) built and green, not yet merged. 14 items
+remain fully untouched: TSK-030/031/032 (HIGH), TSK-036-046 minus
+033/034/035 (11 MEDIUM/LOW).
+
+**Open PRs**: #99 (standup-4 log, clean) and #100 (TSK-029, clean, P1
+labeled) — both missed a review pass last cycle per the note above.
+
+**Squad status**: Engineer-Squad active (TSK-029 shipped this arc,
+handshake-file update pending — not blocking, the PR itself is the
+record). QA-Tester-Squad, Researcher-Squad, UX-UI-Designer-Squad all
+idle, unchanged.
+
+**Cross-squad requests addressed to Owner**: none new. TSK-036's
+non-blocking sub-question still outstanding, still not urgent.
+
+**Rate-limit check**: `allowed_warning` (7-day window) — unchanged across
+all five standups, not worsening.
+
+**PM decision — sprint 5 priority**: Clearing the #99/#100 review backlog
+takes priority this cycle, same reasoning as standup 3 — dispatch one
+**PR Advisor** session (Sonnet, briefed on the `commit-tree` hazard) to
+review and merge both. Dispatch **Engineer-Squad** for **TSK-030**
+(`dbAll`/`dbGet`/`dbDel` never reject on IndexedDB error — silent
+app-hang risk) — next HIGH item per Researcher-Squad's sequencing
+(a11y/reliability after perf). Skip QA-Squad, Researcher-Squad, and
+UX-UI-Designer-Squad — nothing new to verify yet, backlog well-stocked,
+no UI-shaped item.
