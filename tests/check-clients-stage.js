@@ -141,6 +141,37 @@ const { chromium } = require('playwright');
   await page.waitForTimeout(200);
   assert(await page.locator('#customers-body .list-row').count() === 4, '5: All chip restores all 4 rows');
 
+  // ═══ 6. Search input is debounced — rapid keystrokes collapse into one
+  //         render instead of one per character (TSK-029) ═════════════════
+  await page.evaluate(() => {
+    const orig = window.renderCustomers;
+    window.__renderCustomersCalls = 0;
+    if (!window.__renderCustomersPatched) {
+      window.renderCustomers = function (...args) {
+        window.__renderCustomersCalls++;
+        return orig.apply(this, args);
+      };
+      window.__renderCustomersPatched = true;
+    }
+  });
+  const query = activeName.toLowerCase();
+  await page.locator('#client-search').pressSequentially(query, { delay: 20 });
+  // Typing finishes well inside the debounce window (query length * 20ms <<
+  // CLIENT_SEARCH_DEBOUNCE_MS) — the render should not have fired yet, so the
+  // list should still show all 4 clients.
+  assert(await page.evaluate(() => window.__renderCustomersCalls) === 0,
+    '6: renderCustomers has not fired yet immediately after typing (still debouncing)');
+  assert(await page.locator('#customers-body .list-row').count() === 4,
+    '6: list is still unfiltered immediately after typing (debounce still pending)');
+  await page.waitForTimeout(300); // past CLIENT_SEARCH_DEBOUNCE_MS
+  assert(await page.evaluate(() => window.__renderCustomersCalls) === 1,
+    '6: exactly one renderCustomers call fired after the debounce window, not one per keystroke');
+  assert(await page.locator('#customers-body .list-row').count() === 1,
+    '6: list is correctly narrowed to 1 row once the debounced render lands');
+  assert(await rowFor(activeName).count() === 1, '6: the debounced render still narrows to the right client');
+  await page.fill('#client-search', '');
+  await page.waitForTimeout(300);
+
   console.log(`\n${pass} passed, ${fail} failed`);
   console.log('Console/page errors:', errors.length ? errors : 'none');
   await browser.close();

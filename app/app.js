@@ -464,6 +464,24 @@ async function restoreSession() {
 let jobs = [], expenses = [], customers = [], services = [], usageEvents = [], packages = [], settings = {lang:'th', currency:'THB'};
 let currentPeriod = 'month';
 
+// jobs/packages grouped by clientId — rebuilt in reload() right after those
+// arrays are (re)fetched (TSK-029). Both arrays are only ever reassigned
+// wholesale in reload(), never mutated in place elsewhere, so these stay in
+// sync with zero extra bookkeeping. Lets per-client lookups (activePackageFor,
+// clientPackages, clientStage, clientProspectService) work off an O(1) map
+// lookup instead of an O(jobs)/O(packages) filter each time they're called —
+// previously that filter re-ran per client on every Clients-screen render.
+let jobsByClientId = new Map();
+let packagesByClientId = new Map();
+function groupByClientId(rows) {
+  const m = new Map();
+  for (const r of rows) {
+    if (!m.has(r.clientId)) m.set(r.clientId, []);
+    m.get(r.clientId).push(r);
+  }
+  return m;
+}
+
 // HTML/attr escaping (shared by all list/form renderers)
 function htmlEsc(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function attrEsc(s) { return htmlEsc(s).replace(/"/g,'&quot;'); }
@@ -669,12 +687,13 @@ function packageRemainingIgnoringExpiry(pkg) {
 // (the Clients list badge, Home's expiry/almost-done nudges, the standalone
 // package fast-path) omit serviceId and keep the old any-package behavior.
 function activePackageFor(clientId, serviceId) {
-  const mine = packages.filter(p => p.clientId === clientId && (serviceId == null || p.serviceId === serviceId))
+  const mine = (packagesByClientId.get(clientId) || [])
+    .filter(p => serviceId == null || p.serviceId === serviceId)
     .sort((a, b) => (b.purchasedDate || '').localeCompare(a.purchasedDate || '') || (b.id || 0) - (a.id || 0));
   return mine.find(p => packageRemaining(p) > 0) || null;
 }
 function clientPackages(clientId) {
-  return packages.filter(p => p.clientId === clientId)
+  return (packagesByClientId.get(clientId) || []).slice()
     .sort((a, b) => (b.purchasedDate || '').localeCompare(a.purchasedDate || '') || (b.id || 0) - (a.id || 0));
 }
 
@@ -1218,6 +1237,8 @@ async function reload() {
   services.sort((a,b) => (a.name||'').localeCompare(b.name||''));
   usageEvents = (await dbAll('usageEvents')).filter(e => e.uid === uid);
   packages = (await dbAll('packages')).filter(p => p.uid === uid);
+  jobsByClientId = groupByClientId(jobs);
+  packagesByClientId = groupByClientId(packages);
   renderHome();
   renderCustomers();
   renderServices();
@@ -5045,7 +5066,27 @@ async function backfillMemberNumbers() {
 // overdue-invoice half.
 const PACKAGE_ALMOST_DONE_THRESHOLD = 2;
 const PACKAGE_EXPIRY_WARNING_DAYS = 7;
-async function computeClientsNeedingAttention() {
+// renderHome() (via renderHomeToday()) and renderCustomers() both call this
+// independently on the same reload() — each doing its own fresh IndexedDB
+// getAll('invoices') round-trip. Invoices have no in-memory global (unlike
+// jobs/customers/packages, which reload() already keeps current), and can be
+// mutated by paths that don't call reload() at all (e.g. invoices.js's
+// saveInvoice() only calls renderInvoices()), so this can't be cached the
+// same way jobsByClientId/packagesByClientId are — it must always reflect
+// the latest write. Instead, only concurrent/in-flight calls are deduped: the
+// promise is shared while a computation is running (collapsing renderHome's
+// and renderCustomers' near-simultaneous calls within one reload() into a
+// single dbAll('invoices')) and cleared the moment it settles, so the very
+// next call always starts a fresh read rather than serving stale data.
+let __clientsAttentionPromise = null;
+function computeClientsNeedingAttention() {
+  if (!__clientsAttentionPromise) {
+    __clientsAttentionPromise = computeClientsNeedingAttentionUncached()
+      .finally(() => { __clientsAttentionPromise = null; });
+  }
+  return __clientsAttentionPromise;
+}
+async function computeClientsNeedingAttentionUncached() {
   const uid = isGuest ? 'guest' : currentUser.id;
   const todayStr = todayISO();
   const allInvoices = (await dbAll('invoices')).filter(i => i.uid === uid);
@@ -5187,7 +5228,7 @@ window.__clientAttentionActions = [];
 // (see reload()), so the first match below is already the client's
 // most-recent job — no re-sort needed.
 function clientStage(c) {
-  const cj = jobs.filter(j => j.clientId === c.id);
+  const cj = jobsByClientId.get(c.id) || [];
   if (cj.some(jobEarned)) return 'active-customer';
   const mostRecent = cj[0];
   if (mostRecent && mostRecent.outcome === 'lost') return 'lost';
@@ -5198,7 +5239,8 @@ function clientStage(c) {
 // that exists but has a blank serviceName (e.g. the `custom` persona's empty
 // seedServices list can leave a job's service name unset).
 function clientProspectService(c) {
-  const mostRecent = jobs.find(j => j.clientId === c.id);
+  const cj = jobsByClientId.get(c.id);
+  const mostRecent = cj && cj[0];
   return (mostRecent && mostRecent.serviceName) || t('no_engagement_yet');
 }
 // Transient UI state for the Clients screen's search + filter chips — not
@@ -5210,9 +5252,17 @@ function selectClientFilterStage(stage) {
   renderCustomers();
 }
 window.selectClientFilterStage = selectClientFilterStage;
+// Debounced (TSK-029): renderCustomers() re-scans/re-renders the whole list,
+// so firing it on every single keystroke was a real, measurable lag once a
+// shop has a few hundred clients. The query itself is stored immediately —
+// only the (expensive) render is delayed — so the input box's own displayed
+// text is never affected, just how soon the filtered list catches up.
+const CLIENT_SEARCH_DEBOUNCE_MS = 150;
+let __clientSearchDebounceTimer = null;
 function onClientSearchInput(value) {
   window.__clientSearchQuery = value || '';
-  renderCustomers();
+  clearTimeout(__clientSearchDebounceTimer);
+  __clientSearchDebounceTimer = setTimeout(renderCustomers, CLIENT_SEARCH_DEBOUNCE_MS);
 }
 window.onClientSearchInput = onClientSearchInput;
 function needsAttentionRowHtml(item, idx) {
@@ -5226,6 +5276,11 @@ function needsAttentionRowHtml(item, idx) {
       <div class="list-right"><button type="button" class="qc-btn" style="width:auto;padding:0 10px;color:var(--marigold-ink);font-size:12px;font-weight:700" onclick="window.__clientAttentionActions[${idx}]()">${htmlEsc(item.actionLabel)}</button></div>
     </div>`;
 }
+// Bumped on every call so an in-flight (awaiting computeClientsNeedingAttention)
+// render can tell it's been superseded by a newer one — e.g. a debounced
+// search render still resolving when the user switches the filter chip —
+// and bail out instead of overwriting the list with stale results (TSK-029).
+let __clientsRenderToken = 0;
 async function renderCustomers() {
   const wrap = document.getElementById('customers-body');
   const chipsWrap = document.getElementById('client-filter-chips');
@@ -5236,7 +5291,9 @@ async function renderCustomers() {
     if (chipsWrap) chipsWrap.innerHTML = '';
     return;
   }
+  const renderToken = ++__clientsRenderToken;
   const attention = await computeClientsNeedingAttention();
+  if (renderToken !== __clientsRenderToken) return; // a newer render started while this one awaited
   window.__clientAttentionActions = attention.map(item => item.action);
   const attentionHtml = attention.length
     ? `<div class="section-title" style="font-size:12px;margin-bottom:8px">${htmlEsc(t('needs_attention_title'))}</div>

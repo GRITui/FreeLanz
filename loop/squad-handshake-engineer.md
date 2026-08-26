@@ -5,6 +5,78 @@
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
+## Current Focus (2026-08-26, ad-hoc single-item cycle -- TSK-029)
+Pulled **TSK-029** specifically (Clients screen search fires a full
+undebounced re-render + fresh IndexedDB re-scan on every keystroke, ~1.5-2M
+array iterations at realistic scale) as instructed -- a perf item from the
+same epoch-3 launch-polish sweep as TSK-033/034/035 (all three already
+shipped/merged, see entries below), untouched until this cycle. Read the
+full researcher_notes (root cause + 3-part proposed fix) in
+backlog-inbox.md before starting.
+
+Built exactly the proposed approach: (1) `onClientSearchInput()`
+(app/app.js) now debounces the `renderCustomers()` call 150ms instead of
+firing on every keystroke -- the typed value itself is still stored
+immediately, only the expensive render is delayed; (2)
+`computeClientsNeedingAttention()`'s result is no longer independently
+recomputed by both `renderHome()`/`renderHomeToday()` and
+`renderCustomers()` on the same `reload()` -- deduped via a self-clearing
+in-flight promise; (3) `jobs`/`packages` are grouped into `clientId`-keyed
+`Map`s once in `reload()` (rebuilt only when those arrays are actually
+refetched -- neither is ever mutated in place elsewhere in the codebase,
+confirmed by grep), so `activePackageFor`/`clientPackages`/`clientStage`/
+`clientProspectService` do an O(1) map lookup instead of an O(jobs)/
+O(packages) filter per client on every render.
+
+One real bug caught and fixed before shipping, worth recording: my first
+pass cached `computeClientsNeedingAttention()`'s result across separate
+calls (not just concurrent ones), invalidated only inside `reload()` --
+reasoning that `reload()` is the app's one central refresh point. That
+assumption was wrong. `invoices.js`'s real `saveInvoice()` (the actual
+production create/edit-invoice flow) only calls `renderInvoices()`
+afterward, never `reload()` -- so a newly-created or newly-paid invoice
+would never invalidate the cached attention list, meaning "needs
+attention" overdue-invoice nudges on Home/Clients could go stale
+indefinitely after a real invoice mutation. Caught this via the full
+battery, not by inspection: `check-home-today-v2.js` crashed
+(`locator.textContent: Timeout 30000ms exceeded`, `2:
+overdue-invoice row renders for the client, got count 0`) because its
+`__mkInvoice()` test helper deliberately mirrors this exact production
+path (`dbAdd('invoices', ...)` with no `reload()` after, unlike its
+`__mkClient`/`__mkJob`/`__mkPackage` siblings which do call it). Fixed by
+narrowing the cache to only dedupe truly *concurrent* in-flight calls (a
+promise that clears itself via `.finally()` the moment it settles) rather
+than caching across time -- this still collapses `renderHome()` +
+`renderCustomers()`'s near-simultaneous calls within one `reload()` into a
+single `dbAll('invoices')`, but every call after the previous one finishes
+always starts a fresh read, so it can never go stale no matter which code
+path mutated invoices. Lesson for future cycles (same shape as the
+epoch-1/2 corrections recorded below): don't assume "the array is only
+ever repopulated in one place" generalizes to "the derived data reading a
+*different* store is also only ever stale in that one place" -- verify by
+grep across the whole mutation surface (all `dbAdd`/`dbPut`/`dbDel` call
+sites for the store in question), not just the call sites you already
+know about.
+
+New Playwright coverage: `check-clients-stage.js` gained a new section 6
+that monkeypatches `window.renderCustomers` to count calls, types a query
+character-by-character with a 20ms inter-key delay (well inside the
+150ms debounce window), and asserts zero renders fire until the debounce
+window has passed, then exactly one render fires and lands on the
+correctly-filtered result -- regression-guards the debounce delay itself,
+not just the end-state filtering (which sections 4/5 already covered).
+
+Full battery clean: 18 Node harnesses + 34 Playwright suites, 0 failures,
+0 console errors (`npm ci` + `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/
+chromium bash tests/run-all.sh`, same container quirk this file's earlier
+entries already documented). `npx eslint app/app.js` clean (only
+pre-existing warnings, same count as before this change). Shipped: commit
+de4e7b9 on branch `engineer-squad/tsk-029-clients-search-perf`, PR #100
+(open, P1 label applied), subscribed for CI/review activity. Single-item
+cycle as instructed -- not chaining to a second item this pass.
+
+---
+
 ## Current Focus (2026-08-26, ad-hoc single-item cycle -- TSK-035)
 Last item of the stripe/billing/auth money-and-auth test-coverage trio
 Researcher-Squad epoch 3 flagged as highest-leverage this cycle (TSK-033 ->
@@ -338,6 +410,20 @@ assertion failed" — always read the actual FAIL: message, not just the
 pass/fail count.
 
 ## Recent Commits / PRs
+* PR #100 (open, branch `engineer-squad/tsk-029-clients-search-perf`, based
+  on `origin/main`): **TSK-029** -- Clients screen search perf fix. Debounced
+  `onClientSearchInput()` (150ms); `jobs`/`packages` grouped into
+  `clientId`-keyed `Map`s once in `reload()` so `activePackageFor`/
+  `clientPackages`/`clientStage`/`clientProspectService` are O(1) lookups
+  instead of an O(jobs)/O(packages) filter per client per render;
+  `computeClientsNeedingAttention()`'s concurrent `renderHome()`+
+  `renderCustomers()` calls within one `reload()` deduped via a
+  self-clearing in-flight promise (deliberately not cached across separate
+  calls -- see Current Focus above for the real regression this caught and
+  fixed before shipping). New Playwright coverage in
+  `check-clients-stage.js` §6 asserts the render is actually debounced, not
+  just eventually correct. Full battery clean: 18 Node + 34 Playwright
+  suites, 0 failures. P1 label applied, subscribed for CI/review activity.
 * PR #96 (open, branch `engineer-squad/tsk-035-auth-login-tests`, based on
   `origin/main`): **TSK-035** -- api/auth-login.js refactored to the
   `createAuthLoginHandler({getSql, verifyPassword, signSession})`
