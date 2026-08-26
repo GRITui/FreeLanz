@@ -1,18 +1,32 @@
 <squad_metadata>
   <squad_name>Researcher-Squad</squad_name>
   <current_status>IDLE</current_status>
-  <active_task_id>TSK-001</active_task_id>
+  <active_task_id>none</active_task_id>
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
-## Current Focus
-Epoch 1 triage complete. Assessed 11 functional surfaces of Sidekick (app/index.html + module js) against owner criteria: friction/UX debt, mobile ergonomics, discoverability. Ranked 5 candidates into backlog (TSK-002..006). Top recommendation: **More/Settings** (TSK-002), runner-up **Job modal** (TSK-003).
+## Current Focus (2026-08-26, epoch 3 -- auto-improvement sweep, backlog was fully shipped/closed)
+Confirmed at standup #1 (loop/standup-log.md) that the owner-facing backlog (TSK-001..028) is fully shipped/closed with nothing left to triage from a popup or chat ask -- so this epoch did NOT triage existing items (there were none pending) and instead ran a fresh code-level sweep for the next batch of concrete, SSS-tier-launch-polish candidates, per the epoch's own instructions.
+
+Read CLAUDE.md and consulted the shared knowledge base (GRITui/grit-lib, knowledge/sidekickz/README.md -- reachable this cycle, cloned to /home/user/grit-lib) for the repo's tech stack, feature map, and documented known-issues/fragile-areas list before starting, to avoid re-flagging already-known/already-fixed patterns (e.g. rate limiting's known per-isolate weakness, the htmlEsc/attrEsc mixup class already being fixed via TSK-025).
+
+Fanned out 5 parallel research agents, each required to cite real file:line evidence (not speculate) and to explicitly report what they checked and found clean:
+1. **Security** (api/*.js x37, lib/*.js x14) -- auth gaps, input validation, rate-limiting gaps. Found 2 real gaps: TSK-036 (migrate-upload.js bypasses the Basic-plan client cap), TSK-045 (booking-availability.js missing rate limiting its siblings have). Everything else read clean.
+2. **Accessibility + error/empty-state handling** (app/index.html, app/app.js, app/styles.css, module files) -- found TSK-030 (dbAll/dbGet/dbDel never reject on IndexedDB error -- silent app-hang risk), TSK-031 (modals have no focus management at all), TSK-037 (gate-card a11y: qty/date inputs missing accessible names, overdraft error not announced, reason chips missing aria-pressed), TSK-038 (6 load-failure paths fail silently with no toast), TSK-039 (convertQuoteToInvoice swallows a write failure, allows double-conversion). Explicitly verified empty-states/nav/chips/toast-region are already solid -- didn't re-flag what's already fine.
+3. **i18n EN+TH completeness** -- programmatically diffed the full 965 EN / 964 TH key dictionary (app/i18n.js, not app.js -- corrected a stale assumption in the epoch's own briefing) and grepped every literal-English toast/confirm call. Found TSK-032 (hardcoded "Milestone" leaks into real client-facing Thai invoices -- highest-severity i18n finding, an actual outbound document, not app chrome), TSK-040 (business_type_kol has no TH translation + missing from the Settings dropdown), TSK-041 (core-flow toasts: mark-paid, milestone validation, trainer progress log, Thai tax calculator), TSK-046 (34 more hardcoded strings across 4 lower-traffic modules, one of them a straight duplicate of an already-existing key). Confirmed zero broken/mismatched interpolation placeholders anywhere.
+4. **Test-coverage gaps vs tests/run-all.sh** -- established a key structural fact first: run-all.sh never starts the API/DB backend, so a check-*.js filename hit for an api/*.js endpoint is NOT real handler-level coverage, only a direct test-*.mjs import counts. Found 3 HIGH gaps on real money/auth entry points with literally zero coverage (TSK-033 stripe-webhook.js handler logic, TSK-034 billing-checkout.js + billing-portal.js entirely outside the CI-run battery, TSK-035 auth-login.js), plus MEDIUM/LOW gaps (TSK-042 team seat-limit/role-auth endpoints, TSK-043 lib/cors.js despite a documented prior regression in that exact file, TSK-044 two untested package-apportionment branches).
+5. **Perf/jank at realistic data volumes** -- did the actual complexity math against the app's own stated target scale (hundreds of clients/jobs) rather than nitpicking small-N code. Found one real, keystroke-triggered hot path: TSK-029 (Clients screen search fires a full, undebounced re-render + fresh IndexedDB re-scan + ~1.5-2M array iterations on every keystroke). Explicitly ruled OUT two other candidate hot paths (calendar nav, followups queue build) as fine at target scale and said so rather than padding the list.
+
+Net: 18 new task_items appended (TSK-029..046), all scored against the owner's standing criteria plus this launch push's SSS-tier goals (a11y, error/empty-states, i18n, security basics, perf), each with a concrete failure scenario (not hypothetical) and a priority (HIGH/MEDIUM/LOW, mapped to CLAUDE.md's P0-P4 scale in each item's researcher_notes) with one-sentence reasoning. All marked READY_FOR_PM -- none needed an owner design decision to unblock (unlike the TSK-018/020/021/022/023 batch two epochs ago), though TSK-036 carries one small non-blocking sub-question for Engineer-Squad about the exact grandfathering behavior at the cap. No large rewrites or business-model changes proposed, per this epoch's explicit constraint. Every item scoped small enough for one PR; several natural candidates for HIGH-first sequencing are TSK-029 (perf), TSK-030/031 (a11y/reliability), TSK-032 (i18n on a real invoice), and TSK-033/034/035 (test coverage on stripe/billing/auth).
 
 ## Recent Commits / PRs
-* backlog-inbox.md: TSK-001 triaged; TSK-002..007 appended.
+* backlog-inbox.md: TSK-029..046 appended (this epoch's sweep). PR opened against main from a feature branch for owner/PM review (never committed straight to main).
+* (prior epoch) backlog-inbox.md: TSK-001 triaged; TSK-002..007 appended.
 
 ## Blockers & QA Failures
 (none)
 
 ## Cross-Squad Requests
-* (resolved) TSK-007 picked up and delivered; TSK-008..011 triaged and delivered by UX-UI-Designer-Squad. Awaiting owner review.
+* (resolved) TSK-007 picked up and delivered; TSK-008..011 triaged and delivered by UX-UI-Designer-Squad.
+* For Engineer-Squad's PM: TSK-036's fix is unambiguous (enforce the same clientCapFor() check migrate-upload.js currently skips), but there's one small open sub-question -- whether an account mid-migration should be allowed to land existing over-cap data once (grandfathered) vs. hard-capped at import time too. Not blocking; flag to the owner only if it comes up during build.
+* For Engineer-Squad's PM: TSK-033/034/035 (stripe-webhook/billing/auth-login test coverage) are the highest-leverage sequencing candidates this epoch -- all three are real money/auth entry points currently outside the deploy-gating test battery entirely, not just under-tested. Recommend sequencing at least one of these before the lower-priority i18n/a11y polish items if build capacity is limited.
