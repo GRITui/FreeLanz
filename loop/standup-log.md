@@ -47,6 +47,19 @@ produces new `READY_FOR_PM` items. Next standup (sprint 2, ~6h out) will
 dispatch Engineer-Squad (and UX-UI-Designer-Squad if any candidate needs
 a design direction) against whatever Researcher-Squad lands.
 
+**Post-standup-1 activity (ad-hoc, between scheduled sprints)**: Researcher-
+Squad delivered 18 new candidates same-cycle (PR #91, TSK-029..046, merged).
+Stood up a standing PR Advisor role (Fable model) to review/merge squad PRs
+so routine merges don't wait on the human owner — reviewed and merged both
+PR #90 and PR #91, catching and getting fixed two real issues in #90 first
+(wrong shipped/non-shipped counts, missing P2 label). Learned cross-session
+`SendMessage` doesn't reach cloud sessions spawned via `create_session`, so
+future cycles spawn one fresh Advisor session per cycle with that cycle's
+PR list, rather than messaging a persistent one. An ad-hoc Engineer-Squad
+session was also dispatched against the new backlog (rate-limit status was
+"allowed_warning", judged acceptable for one small item) and opened PR #92
+(TSK-033, stripe-webhook handler test coverage) — open, not yet reviewed.
+
 ---
 
 ## Standup #2 — 2026-08-26 (~06:39 UTC)
