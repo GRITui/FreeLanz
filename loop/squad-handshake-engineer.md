@@ -338,7 +338,7 @@ assertion failed" — always read the actual FAIL: message, not just the
 pass/fail count.
 
 ## Recent Commits / PRs
-* PR pending (branch `engineer-squad/tsk-035-auth-login-tests`, based on
+* PR #96 (open, branch `engineer-squad/tsk-035-auth-login-tests`, based on
   `origin/main`): **TSK-035** -- api/auth-login.js refactored to the
   `createAuthLoginHandler({getSql, verifyPassword, signSession})`
   DI-factory shape (same as TSK-033/034's precedent), unblocking real
