@@ -132,9 +132,11 @@ async function migrateLegacyStorageIfNeeded() {
   localStorage.setItem(LEGACY_MIGRATION_FLAG, '1');
 }
 function dbAll(store) {
-  return new Promise(res => {
+  return new Promise((res, rej) => {
     const tx = db.transaction(store, 'readonly');
-    tx.objectStore(store).getAll().onsuccess = e => res(e.target.result);
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = e => res(e.target.result);
+    req.onerror = () => rej(req.error);
   });
 }
 function dbPut(store, obj) {
@@ -154,21 +156,27 @@ function dbAdd(store, obj) {
   });
 }
 function dbDel(store, id) {
-  return new Promise(res => {
+  return new Promise((res, rej) => {
     const tx = db.transaction(store, 'readwrite');
-    tx.objectStore(store).delete(id).onsuccess = () => res();
+    const req = tx.objectStore(store).delete(id);
+    req.onsuccess = () => res();
+    req.onerror = () => rej(req.error);
   });
 }
 function dbGet(store, key) {
-  return new Promise(res => {
+  return new Promise((res, rej) => {
     const tx = db.transaction(store, 'readonly');
-    tx.objectStore(store).get(key).onsuccess = e => res(e.target.result);
+    const req = tx.objectStore(store).get(key);
+    req.onsuccess = e => res(e.target.result);
+    req.onerror = () => rej(req.error);
   });
 }
 function dbGetByUsername(username) {
-  return new Promise(res => {
+  return new Promise((res, rej) => {
     const tx = db.transaction('users', 'readonly');
-    tx.objectStore('users').index('username').get(username).onsuccess = e => res(e.target.result);
+    const req = tx.objectStore('users').index('username').get(username);
+    req.onsuccess = e => res(e.target.result);
+    req.onerror = () => rej(req.error);
   });
 }
 function cuid() { return crypto.randomUUID ? crypto.randomUUID() : 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
