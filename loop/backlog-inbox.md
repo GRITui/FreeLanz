@@ -375,7 +375,7 @@ CORRECTION (2026-08-05, caught before shipping): this task_item originally guess
 <task_item>
   <id>TSK-035</id>
   <source>RESEARCHER_SQUAD</source>
-  <status>READY_FOR_PM</status>
+  <status>READY_FOR_PM</status><!-- SHIPPED by Engineer-Squad 2026-08-26: PR #96 (open), branch engineer-squad/tsk-035-auth-login-tests. See squad-handshake-engineer.md. -->
   <priority>HIGH</priority>
   <title>api/auth-login.js has zero test coverage (anti-enumeration behavior + rate-limit wiring unverified)</title>
   <description>Grep across tests/ for "auth-login" returns nothing -- this endpoint has no direct test at all. Untested logic includes the generic-failure-message anti-enumeration behavior (api/auth-login.js:44-58 -- a LINE-only account and a wrong-password attempt both return the same `GENERIC_FAIL`, deliberately not revealing which case occurred) and the `rateLimit(request, {key:'auth-login', limit:10})` call at line 31. lib/rateLimit.js itself is unit-tested in isolation, but nothing verifies auth-login.js actually wires it in correctly with the right key/limit, or that a future edit to the failure-message logic doesn't reintroduce a username-enumeration regression (leaking which failure case occurred, e.g. distinguishing "no such user" from "wrong password").</description>

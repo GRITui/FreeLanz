@@ -5,6 +5,67 @@
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
+## Current Focus (2026-08-26, ad-hoc single-item cycle -- TSK-035)
+Last item of the stripe/billing/auth money-and-auth test-coverage trio
+Researcher-Squad epoch 3 flagged as highest-leverage this cycle (TSK-033 ->
+PR #92, TSK-034 -> PR #94, both already built by earlier cycles this epoch
+-- checked both PRs via the GitHub API before starting: neither is merged
+to main yet, and neither touches api/auth-login.js or a
+tests/test-auth-login.mjs file, so no duplicate work). Branched from
+origin/main, which already carries PR #91's epoch-3 backlog additions
+(TSK-029..046) -- no separate rebase needed.
+
+Same shape as TSK-033/034: api/auth-login.js was a bare `export default
+async function handler(request)` importing `db`/`verifyPassword`/
+`signSession` directly at module scope -- no injection seam for a fake sql
+or stubbed crypto existed. Refactored to `createAuthLoginHandler({getSql,
+verifyPassword, signSession})`, the same `opts.getSql || db` factory shape
+api/booking-requests.js / api/stripe-webhook.js / api/billing-checkout.js
+already established (per PR #92/#94's own precedent, read before starting).
+`export default createAuthLoginHandler()` keeps production wiring
+identical -- zero behavior change, confirmed by the full battery below.
+
+New tests/test-auth-login.mjs (33 assertions) against an in-memory fake
+`users` table (fakeSql supports both the tagged-template and (text, params)
+call styles auth-login.js itself uses, matching tests/test-teams.mjs's own
+fakeSql convention) and stubbed verify/sign functions: method gating;
+missing SESSION_SECRET -> 500 with no DB/verify work attempted; missing
+username/password -> generic fail with no DB query; a malformed JSON body
+caught, not thrown; the three anti-enumeration cases (unknown username /
+known username+wrong password / LINE-only account with
+password_hash===null) all asserted to produce BYTE-IDENTICAL status+body,
+the actual security property GENERIC_FAIL exists for; a successful login's
+response shape (token + cuid/username/firstName only -- confirmed
+password_hash/salt/iters never leak into the response body); username
+trim+lowercase before lookup; a DB failure caught and mapped to 502
+(distinguishable from a real bad-credentials 401 in logs/monitoring,
+without the client-facing response ever revealing which); and the
+rate-limit-wiring proof itself -- 10 requests from one IP all reach normal
+auth handling, the 11th gets 429, using a dedicated IP no other assertion
+in the file touches so lib/rateLimit.js's real, unmocked module-level
+buckets never bleed across scenarios (lib/rateLimit.js's own limiter logic
+stays unit-tested in isolation by tests/test-ratelimit.mjs -- this file
+only proves auth-login.js wires it in with the right key/limit).
+
+tests/test-auth-login.mjs: 33/33 (new file -- zero direct coverage existed
+before this). Full battery re-run clean: `npm ci` (node_modules wasn't
+present in this container) + `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/
+chromium bash tests/run-all.sh` (same container quirk this file's
+epoch-1/TSK-025..027 entries below already documented) -- 17 Node harnesses
++ 34 Playwright suites, 0 failures, exit code 0, no console-error/CRASH
+lines in the raw log. `npx eslint api/auth-login.js tests/test-auth-
+login.mjs` clean, no findings.
+
+This closes out the whole stripe/billing/auth test-coverage trio this
+epoch flagged as highest-leverage (TSK-033/034/035) -- all three now have
+real handler-level coverage via the same DI-factory shape. (Post-write
+note: TSK-033/034's PRs #92/#94 both merged to main while this cycle was
+in flight -- merged origin/main into this branch to pick up both, resolved
+the resulting conflicts in this file and backlog-inbox.md by keeping all
+three squads' entries, no content dropped.)
+
+---
+
 ## Current Focus (2026-08-26, ad-hoc single-item cycle -- TSK-033)
 Started this cycle checked out on `researcher-squad/epoch3-launch-polish-sweep`
 (PR #91, open/green/mergeable, backlog-only diff adding TSK-029..046 --
@@ -277,7 +338,17 @@ assertion failed" — always read the actual FAIL: message, not just the
 pass/fail count.
 
 ## Recent Commits / PRs
-* PR #92 (open, branch `engineer-squad/tsk-033-stripe-webhook-tests`, based on
+* PR #96 (open, branch `engineer-squad/tsk-035-auth-login-tests`, based on
+  `origin/main`): **TSK-035** -- api/auth-login.js refactored to the
+  `createAuthLoginHandler({getSql, verifyPassword, signSession})`
+  DI-factory shape (same as TSK-033/034's precedent), unblocking real
+  handler-level testing; new tests/test-auth-login.mjs, 33 assertions
+  covering method/secret/body gating, the three-way anti-enumeration
+  response-identity guarantee, successful-login response shape (no
+  password material leakage), username normalization, DB-failure mapping
+  to 502, and the rate-limit-wiring proof (11th request from one IP ->
+  429). Full battery clean: 17 Node + 34 Playwright suites, 0 failures.
+* PR #92 (merged, branch `engineer-squad/tsk-033-stripe-webhook-tests`, based on
   the not-yet-merged `researcher-squad/epoch3-launch-polish-sweep` /
   PR #91): **TSK-033** -- api/stripe-webhook.js refactored to the
   `createStripeWebhookHandler({getSql, verifyWebhook, getStripeClient})`
@@ -287,7 +358,7 @@ pass/fail count.
   `mapStripeStatus`'s full table, the out-of-order-delivery reconciliation
   path, both DB-write branches, and the DB-write-failure fallback. Full
   battery clean: 15 Node + 34 Playwright suites, 0 failures.
-* PR #94 (open, 2026-08-26): **TSK-034** -- api/billing-checkout.js /
+* PR #94 (merged, 2026-08-26): **TSK-034** -- api/billing-checkout.js /
   api/billing-portal.js refactored to the createXHandler({getSql,
   getStripeClient}) injection shape (matching TSK-033's PR #92); new
   tests/test-billing.mjs, 33/33 passing. Full battery clean: 17 Node + 34
