@@ -5,6 +5,51 @@
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
+## Current Focus (2026-08-26 -- TSK-034 shipped, single-item cycle)
+Pulled **TSK-034** specifically (api/billing-checkout.js / api/billing-portal.js
+had zero coverage in the CI-gating test battery -- same class of gap as
+TSK-033, which is already in flight on PR #92/branch
+engineer-squad/tsk-033-stripe-webhook-tests, not duplicated here). Read
+that branch's diff first to confirm the established
+`createXHandler({getSql, ...})` dependency-injection shape (also used by
+api/booking-requests.js, api/slip-verify.js, api/cron-reminders.js) before
+touching either file, so this PR matches the same convention rather than
+inventing a new one.
+
+Refactored both handlers into `createBillingCheckoutHandler(opts)` /
+`createBillingPortalHandler(opts)` factories with an
+`opts.getSql`/`opts.getStripeClient` injection seam --
+`requireSession` itself is left untouched (pure HMAC verification, no
+DB/network involved) so tests exercise it with a real `signSession()`
+token rather than mocking it, same as tests/test-booking-confirm.mjs.
+`export default create...Handler()` keeps production wiring to the real
+`db()`/`stripeClient()` unchanged -- no behavior change to either endpoint.
+
+New tests/test-billing.mjs (33 assertions) against an in-memory fake sql +
+fake Stripe client: method/secret/auth gating on both handlers; invalid
+plan and missing STRIPE_PRICE_* env var on checkout; team-seat quantity
+validation (non-integer, below the 2-seat minimum); the owner-only gate on
+both handlers (403 for a team member, Stripe never reached); account-not-
+found (404) on both; checkout's first-time-customer creation (email passed
+only for an email-shaped username, new customer id persisted back onto the
+user row) vs. reusing an existing stripe_customer_id (no duplicate
+customer created); correct price ID + quantity per plan; success_url/
+cancel_url/return_url all landing on the app's own origin (not a bare
+Vercel/API origin); the portal's 409 no_customer branch; and a Stripe API
+failure mapped to 502 on both handlers rather than left to throw.
+
+Full battery clean: 17 Node harnesses + 34 Playwright suites, 0 failures,
+0 console errors (`npm ci && PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium
+bash tests/run-all.sh` -- same Chromium-path workaround this file's epoch-1
+entry already documented for this sandbox image; the pre-installed
+Chromium at /opt/pw-browsers/chromium is a version behind what the pinned
+Playwright devDependency's default executablePath resolution expects).
+Shipped: commit on branch engineer-squad/tsk-034-billing-tests, PR #94
+(open, P1 label applied), subscribed for CI/review activity. Single-item
+cycle as instructed -- not chaining to a second item this pass.
+
+---
+
 ## Current Focus (2026-08-05, epoch 2 -- PR #83 merged, this is the follow-up)
 TSK-025/026/027 (epoch 1, see entry below) merged to main via PR #83. This
 second auto-improvement pass re-synced to main, then searched further:
@@ -173,6 +218,12 @@ assertion failed" — always read the actual FAIL: message, not just the
 pass/fail count.
 
 ## Recent Commits / PRs
+* PR #94 (open, 2026-08-26): **TSK-034** -- api/billing-checkout.js /
+  api/billing-portal.js refactored to the createXHandler({getSql,
+  getStripeClient}) injection shape (matching TSK-033's PR #92); new
+  tests/test-billing.mjs, 33/33 passing. Full battery clean: 17 Node + 34
+  Playwright suites, 0 failures. See Current Focus above for the full
+  writeup. Subscribed for CI/review activity.
 * PR #64 (merged): TSK-014 stage migration (6→4 stages) + LINE Login deferral.
 * PR #65 (merged): design_handoff_sidekick_refinements batch — TSK-012/013/011,
   TSK-002/007, TSK-009, TSK-008, TSK-010. Playwright 840/840 across 33 suites

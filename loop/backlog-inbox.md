@@ -365,7 +365,7 @@ CORRECTION (2026-08-05, caught before shipping): this task_item originally guess
 <task_item>
   <id>TSK-034</id>
   <source>RESEARCHER_SQUAD</source>
-  <status>READY_FOR_PM</status>
+  <status>READY_FOR_PM</status><!-- SHIPPED by Engineer-Squad 2026-08-26: commit d36c30e, PR #94 (open). Both handlers refactored to the createXHandler({getSql, getStripeClient}) injection shape (matching TSK-033's PR #92); new tests/test-billing.mjs, 33/33 passing. Full battery clean: 17 Node + 34 Playwright suites, 0 failures. See squad-handshake-engineer.md. -->
   <priority>HIGH</priority>
   <title>api/billing-checkout.js and api/billing-portal.js have no coverage in the actual CI-run test battery</title>
   <description>api/billing-checkout.js's only reference anywhere in tests/ is tests/smoke-live.mjs:136-139 -- and smoke-live.mjs requires a live deployment and is explicitly excluded from tests/run-all.sh's globs (`test-*.mjs`/`check-*.js`), so this endpoint has zero coverage in the battery that actually gates deploys. api/billing-portal.js has literally zero references anywhere in tests/ (grep confirms). Risky untested logic: billing-checkout.js's plan/price-ID selection and success/cancel URL construction (built via lib/cors.js's `appUrl()`, itself also untested -- see the companion cors.js task_item); billing-portal.js's owner-only gate (`isAccountOwner`, :43-53) and the `no_customer` 409 branch for an account with no stored `stripe_customer_id`. A regression in either ships undetected by the regular test run: a broken checkout URL silently breaks the paid-upgrade funnel, or a broken owner-only gate could let a team member (staff/admin) reach the billing portal.</description>
