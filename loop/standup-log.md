@@ -106,3 +106,65 @@ cycle's work to review/merge whatever PRs are open (#92 plus anything
 Engineer/QA open this cycle). Skip Researcher-Squad and UX-UI-Designer-
 Squad this cycle — backlog has 17 untouched actionable items, no
 UI-direction-shaped candidate among them.
+
+**Post-standup-2 activity (ad-hoc, before the trigger's next scheduled
+fire)**: Resolved a merge conflict on PR #92 by hand (main had moved
+forward past #91/#93 merging while #92's branch was still based on #91's
+pre-merge state) and verified the merged head locally since
+`deploy-vercel.yml`'s `pull_request` trigger only fires on `opened`, so a
+synchronize push gets no automatic battery run — full battery green (15
+Node + 34 Playwright, 0 failed). QA-Tester-Squad landed its own commit on
+PR #92 verifying TSK-033: PASS on all criteria (genuine handler-level
+coverage, not filename-only; covers signature handling + the money-
+affecting branches), no blockers. Engineer-Squad landed **PR #94**
+(TSK-034 — billing-checkout/billing-portal test coverage, 33/33 new
+assertions, full battery green). **The sprint-2 PR Advisor
+session failed**: it was spawned on the `claude-fable-5` model, which
+requires separate usage credits this account doesn't currently have —
+session ended with `status_category: failed`, `"Fable 5 requires usage
+credits. Switch to another model to continue."` before reviewing anything.
+Net effect: PR #92 (TSK-033), #93 (standup-2 log), and #94 (TSK-034) all
+sat open/unreviewed from ~06:41 to this standup. **Fix applied this
+cycle**: future PR Advisor spawns use the default/inherited model (Sonnet)
+instead of pinning `claude-fable-5`, until Fable usage credits are
+confirmed available.
+
+---
+
+## Standup #3 — 2026-08-26 (~09:35 UTC, ad-hoc — user asked to run a new sprint)
+
+**Backlog (`loop/backlog-inbox.md`)**: still 46 task_items. 22 shipped as
+of standup 1, TSK-033 (PR #92) and TSK-034 (PR #94) both built and green
+but **unmerged** due to the Advisor failure above. 16 items remain fully
+untouched: TSK-029/030/031/032 (HIGH), TSK-035 (HIGH — auth-login.js test
+coverage, last of the money/auth trio), TSK-036-046 minus 033/034
+(MEDIUM/LOW).
+
+**Open PRs**: #92 (TSK-033, clean, verified twice), #93 (standup-2 log,
+clean), #94 (TSK-034, clean, not yet independently QA-verified).
+
+**Squad status**: Researcher-Squad idle (100%). Engineer-Squad active this
+cycle (TSK-033 then TSK-034, both shipped as PRs). QA-Tester-Squad landed
+one verification (TSK-033/PR #92, PASS) and is otherwise idle. UX-UI-
+Designer-Squad idle, still nothing UI-shaped in the backlog.
+
+**Cross-squad requests addressed to Owner**: none new beyond the
+non-blocking TSK-036 sub-question already logged at standup 2.
+
+**Rate-limit check**: `allowed_warning` (7-day window, main session) —
+unchanged, not worse. Separately, the Fable model's own credit pool reads
+`rejected` — noted above, worked around by not pinning that model for the
+Advisor role going forward.
+
+**PM decision — sprint 3 priority**: Clearing the review backlog is now
+higher priority than starting new build work — three green PRs sitting
+unreviewed for ~3 hours defeats the point of the Advisor role. Dispatch
+one **PR Advisor** session (Sonnet model this time) to review and merge
+#92, #93, and #94 in one pass. Dispatch **Engineer-Squad** for **TSK-035**
+(auth-login.js test coverage — completes the stripe/billing/auth
+money-and-auth test-coverage trio Researcher-Squad flagged as this
+epoch's highest-leverage sequencing). Skip QA-Squad, Researcher-Squad, and
+UX-UI-Designer-Squad this cycle — QA has nothing new to verify yet
+(TSK-034/PR #94 verification can wait for the Advisor's read or next
+cycle's QA pass), and there's no UI-shaped or empty-backlog condition
+calling for the other two.
