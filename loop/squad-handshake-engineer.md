@@ -5,6 +5,72 @@
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
+## Current Focus (2026-08-26, ad-hoc single-item cycle -- TSK-030)
+Pulled **TSK-030** specifically as instructed: `dbAll()`/`dbGet()`/
+`dbDel()`/`dbGetByUsername()` (app/app.js) each built a Promise that
+resolved on `IDBRequest.onsuccess` but never wired `onerror` at all --
+unlike `dbPut`/`dbAdd`, which already correctly reject via
+`req.onerror = () => rej(req.error)`. A real IndexedDB read failure
+(transaction abort, unexpected DB close, storage error) left the returned
+Promise permanently unsettled, not even rejected. `reload()` (boot +
+nearly every mutation) awaits these sequentially, so a single stuck read
+silently stopped every render depending on it, with zero console error,
+toast, or retry -- the app just looks frozen or blank.
+
+Fix matched the researcher_notes exactly: added the same
+`req.onerror = () => rej(req.error)` line to all 4 functions, mirroring
+`dbPut`/`dbAdd`'s existing pattern. Checked whether `bootApp()` also
+needed a new try/catch wrapper as the researcher_notes suggested --
+traced `boot()` (app/app.js) and found it already wraps the whole
+`bootApp()` chain in a `.catch()` that shows a "Couldn't start Sidekick"
+error message. That path was previously unreachable for this failure mode
+only because the promises never rejected; once they do, `boot()`'s
+existing handler catches them correctly with no additional plumbing
+needed -- kept the fix to just the 4-line change, no scope creep.
+
+New tests/check-db-error-handling.js: monkey-patches
+`IDBObjectStore.prototype.getAll/get/delete` and `IDBIndex.prototype.get`
+to fail (fire `onerror` instead of `onsuccess`), then asserts each of the
+4 helpers rejects promptly rather than hanging, racing each call against
+a 1.5s timeout so a regression back to the old behavior fails loudly
+instead of silently stalling the suite. Verified the test actually
+catches the bug before trusting it: ran it against the pre-fix code via
+`git stash` -- 4/4 cases reported `hung`; against the fix -- 6/6 pass
+(the extra 2 assertions confirm the normal success path and zero console
+errors are unaffected).
+
+Branch was cut from a slightly stale `origin/main` snapshot; `origin/main`
+had moved on (PR #101's standup log, plus TSK-029's PR #100 content
+already in this file) by the time this cycle finished building. Merged
+via a real `git merge origin/main` (never `git commit-tree` -- see this
+file's PR #97 history note below for why that matters) -- `app/app.js`
+auto-merged cleanly with no conflict, since TSK-029's changes and this
+fix touch different functions in the same file. Full battery re-run
+clean after the merge.
+
+Full battery: `npm ci` (node_modules wasn't present in this container) +
+`PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium bash tests/run-all.sh`
+-- 18 Node harnesses + 37 Playwright suites (including the new one), 0
+failures, exit code 0, no console-error/CRASH lines in the raw log.
+`npx eslint app/app.js tests/check-db-error-handling.js` shows only
+pre-existing noise: `app/app.js`'s usual unused-var/empty-block warnings
+(same set as before this change, `no-undef` correctly disabled repo-wide
+for that file per the project's own eslint config comment explaining
+classic-script cross-file globals), and `tests/check-db-error-handling.js`
+gets the same `no-undef` errors (`require`/`process`/`window`/etc.) every
+other `tests/check-*.js` file gets under the flat config's defaults --
+confirmed by running eslint against `tests/check-demo-data.js` for
+comparison, same error shape. Not part of the CI gate either way
+(`deploy-vercel.yml`'s `test` job runs `tests/run-all.sh`, no eslint
+step) -- pre-existing, repo-wide, out of this single-item cycle's scope.
+
+Shipped: commit c915d1c (+ the origin/main merge commit) on branch
+`engineer-squad/tsk-030-indexeddb-error-handling`, PR #102 (open, P1
+label applied), subscribed for CI/review activity. Single-item cycle as
+instructed -- not chaining to a second item this pass.
+
+---
+
 ## Current Focus (2026-08-26, ad-hoc single-item cycle -- TSK-029)
 Pulled **TSK-029** specifically (Clients screen search fires a full
 undebounced re-render + fresh IndexedDB re-scan on every keystroke, ~1.5-2M
@@ -410,6 +476,17 @@ assertion failed" — always read the actual FAIL: message, not just the
 pass/fail count.
 
 ## Recent Commits / PRs
+* PR #102 (open, branch `engineer-squad/tsk-030-indexeddb-error-handling`,
+  merged with `origin/main` via a real `git merge`): **TSK-030** --
+  `dbAll`/`dbGet`/`dbDel`/`dbGetByUsername` now wire `req.onerror` so a
+  real IndexedDB read failure rejects the returned Promise instead of
+  leaving it (and everything awaiting `reload()`) hanging forever with no
+  error shown, matching `dbPut`/`dbAdd`'s existing correct pattern. New
+  `tests/check-db-error-handling.js` (6 assertions) proves each helper
+  rejects promptly on a simulated failed request -- verified against the
+  pre-fix code first (4/4 "hung") to confirm the test is a real regression
+  guard, not a tautology. Full battery clean: 18 Node + 37 Playwright
+  suites, 0 failures. P1 label applied, subscribed for CI/review activity.
 * PR #100 (open, branch `engineer-squad/tsk-029-clients-search-perf`, based
   on `origin/main`): **TSK-029** -- Clients screen search perf fix. Debounced
   `onClientSearchInput()` (150ms); `jobs`/`packages` grouped into
