@@ -5,6 +5,85 @@
   <sprint_completion_percentage>100</sprint_completion_percentage>
 </squad_metadata>
 
+## Current Focus (2026-08-27, ad-hoc single-item cycle -- TSK-031)
+Pulled **TSK-031** specifically (all 6 modal surfaces -- job/customer/
+service/account-name plus the dynamically-created markJobLost picker --
+had no focus management: no initial focus on open, no focus trap, no
+Escape-to-close, no return-focus on close). Read the exact file:line
+references and proposed fix in backlog-inbox.md's researcher_notes before
+starting; matched its proposed shape closely (store/restore
+`document.activeElement`, focus the first focusable field on open, one
+delegated document-level Escape listener) and additionally added a
+Tab/Shift+Tab trap, since "no focus trap" was explicitly named as one of
+the four gaps and the researcher's minimal-fix description didn't
+otherwise cover it.
+
+Built a small shared helper (`openModalFocus`/`closeModalFocus`/
+`registerModalCloser`, placed just above `openAccountNameModal` in
+app/app.js, the first modal-open/close pair in the file) rather than
+duplicating store/restore/focus logic across all 6 functions. Each
+existing `openXModal()`/`closeXModal()` now calls the shared helper
+alongside its own pre-existing side effects untouched (e.g.
+`closeCustomerModal`'s `__pendingJobCustomerLink` reset,
+`closeServiceModal`'s `__pendingJobServiceLink` reset). `markJobLost`'s
+dynamically-created overlay needed its own small `closeLostModal`
+wrapper (its existing overlay-click / Cancel-button close paths both
+route through it now) plus a `closeModalFocus()` call added to
+`confirmMarkJobLost`'s separate `overlay?.remove()` path, since that
+function closes the same modal via a different code path (Confirm, not
+Cancel/overlay-click). One delegated `document`-level keydown listener
+handles both Escape (closes whichever *registered* modal is topmost in
+DOM order -- deliberately scoped only to the 6 in-scope overlay ids via
+`registerModalCloser`, not every `.modal-overlay` in the app, since
+research.js/invoices.js/bookings.js/docgen.js/portfolio.js each build
+their own unrelated overlays with the same CSS class and were never part
+of this task's scope) and Tab-trapping (wraps Tab/Shift+Tab within the
+topmost registered modal's focusable elements).
+
+One real gap caught and deliberately NOT expanded into, worth recording:
+`.account-row` (app/index.html:160, the only real-world trigger for the
+account-name modal) is a plain `onclick` div with no `tabindex` --
+clicking it (verified directly via a debug script) blurs whatever was
+previously focused to `<body>` before the click handler even runs, so it
+can never itself be the element focus returns to, and a keyboard user
+has no way to reach it at all. That's a separate, pre-existing
+accessibility gap (a clickable-div-with-no-tabindex pattern that doesn't
+exist anywhere else in this codebase, so "fix this one row" would be
+introducing a new convention, not matching an existing one) -- out of
+scope for a task specifically about the 6 modal open/close *function*
+pairs. Adjusted the new test to exercise `openAccountNameModal()`/
+`closeAccountNameModal()` directly instead (same approach the suite
+already uses for `markJobLost`, which also isn't wired to a live UI
+trigger), which correctly proves the function pair's own store/restore
+logic without being confounded by that unrelated trigger-focusability
+gap. Flagging here in case a future cycle wants to pick up
+clickable-div keyboard-reachability as its own item.
+
+New tests/check-modal-focus.js (23 assertions): drives the FAB/"Add
+client"/"Add service" via real clicks (proving the full real-world path
+end to end, including return-focus landing back on the exact button
+clicked), and account-name/markJobLost via direct function calls per the
+gap noted above. Covers initial focus-in-modal, the Tab-trap in both
+directions (Shift+Tab from the first field wraps to the last; Tab from
+there returns to the first), Escape-close, and return-focus.
+
+Full battery clean: 18 Node harnesses + 36 Playwright suites, 0 failures,
+0 console errors (`npm ci && PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/
+chromium bash tests/run-all.sh`, same container quirk this file's earlier
+entries already documented). `npx eslint app/app.js tests/check-modal-
+focus.js` clean -- app.js shows only pre-existing warnings (same count as
+before this change); the new test file's `no-undef` findings are the same
+repo-wide, not-CI-gated noise every other tests/check-*.js file already
+has (confirmed by running eslint against check-job-modal-v2.js directly
+for comparison). Branched from origin/main, which had moved (TSK-030/PR
+#102 + a standup-log commit merged mid-cycle) -- picked up via a real
+`git merge origin/main` (clean auto-merge in app.js), re-ran the full
+battery after merging to confirm nothing broke. Shipped: PR #104 (open,
+P1 label applied), subscribed for CI/review activity. Single-item cycle
+as instructed -- not chaining to a second item this pass.
+
+---
+
 ## Current Focus (2026-08-26, ad-hoc single-item cycle -- TSK-030)
 Pulled **TSK-030** specifically as instructed: `dbAll()`/`dbGet()`/
 `dbDel()`/`dbGetByUsername()` (app/app.js) each built a Promise that
@@ -476,6 +555,22 @@ assertion failed" — always read the actual FAIL: message, not just the
 pass/fail count.
 
 ## Recent Commits / PRs
+* PR #104 (open, branch `engineer-squad/tsk-031-modal-focus-management`,
+  merged with `origin/main` via a real `git merge` after TSK-030/PR #102
+  landed mid-cycle): **TSK-031** -- all 6 modal surfaces (job/customer/
+  service/account-name + the dynamically-created markJobLost picker) gain
+  focus management via a shared `openModalFocus`/`closeModalFocus`/
+  `registerModalCloser` helper: initial focus into the modal on open,
+  return-focus to the trigger on close, and one delegated document-level
+  keydown listener that closes the topmost registered modal on Escape and
+  traps Tab/Shift+Tab inside it. New `tests/check-modal-focus.js` (23
+  assertions) drives real trigger clicks (FAB/"Add client"/"Add service")
+  plus direct function calls for the 2 surfaces with no live-reachable
+  trigger (account-name's `.account-row` div has no `tabindex` -- a
+  separate, out-of-scope gap flagged in Current Focus above; markJobLost
+  isn't wired to any UI button per its own TSK-012 comment). Full battery
+  clean: 18 Node + 36 Playwright suites, 0 failures. P1 label applied,
+  subscribed for CI/review activity.
 * PR #102 (open, branch `engineer-squad/tsk-030-indexeddb-error-handling`,
   merged with `origin/main` via a real `git merge`): **TSK-030** --
   `dbAll`/`dbGet`/`dbDel`/`dbGetByUsername` now wire `req.onerror` so a

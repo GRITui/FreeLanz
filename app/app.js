@@ -1205,12 +1205,68 @@ function applyUser() {
   if (chevron) chevron.style.display = isGuest ? 'none' : '';
 }
 
+// ─── Modal focus management ────────────────────────────────────────────
+// Shared by every modal-overlay surface in the app (job/customer/service/
+// account-name below, plus the dynamically-built lost-reason picker
+// further down): openModalFocus() stores the triggering element and
+// moves focus into the modal; closeModalFocus() restores it.
+// registerModalCloser() records how to close each overlay by id so the
+// one delegated keydown listener below can close/trap-focus-in whichever
+// registered modal is topmost, without needing to know its specific
+// close-side-effects (e.g. closeCustomerModal's pending-link reset).
+const MODAL_RETURN_FOCUS = new Map();
+const MODAL_CLOSERS = {};
+function registerModalCloser(overlayId, closeFn) { MODAL_CLOSERS[overlayId] = closeFn; }
+function focusableEls(container) {
+  return Array.from(container.querySelectorAll('input,select,textarea,button,a[href],[tabindex]:not([tabindex="-1"])'))
+    .filter(el => !el.disabled && el.offsetParent !== null);
+}
+function openModalFocus(overlay) {
+  if (!overlay) return;
+  MODAL_RETURN_FOCUS.set(overlay.id, document.activeElement);
+  const first = focusableEls(overlay)[0];
+  if (first) first.focus();
+}
+function closeModalFocus(overlay) {
+  if (!overlay) return;
+  const toFocus = MODAL_RETURN_FOCUS.get(overlay.id);
+  MODAL_RETURN_FOCUS.delete(overlay.id);
+  if (toFocus && typeof toFocus.focus === 'function' && document.body.contains(toFocus)) toFocus.focus();
+}
+// Topmost = the last registered overlay that's actually .open, in DOM
+// order -- covers the dynamically-appended lost-modal landing after the
+// static ones without needing a separate open-stack counter.
+function topmostOpenModalId() {
+  const opens = Array.from(document.querySelectorAll('.modal-overlay.open')).filter(el => MODAL_CLOSERS[el.id]);
+  return opens.length ? opens[opens.length - 1].id : null;
+}
+document.addEventListener('keydown', e => {
+  const topId = topmostOpenModalId();
+  if (!topId) return;
+  if (e.key === 'Escape') { e.preventDefault(); MODAL_CLOSERS[topId](); return; }
+  if (e.key === 'Tab') {
+    const overlay = document.getElementById(topId);
+    const els = focusableEls(overlay);
+    if (!els.length) return;
+    const first = els[0], last = els[els.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+});
+
 function openAccountNameModal() {
   if (isGuest || !currentUser) return;
   document.getElementById('acct-name-input').value = currentUser.firstName || '';
-  document.getElementById('modal-account-name').classList.add('open');
+  const overlay = document.getElementById('modal-account-name');
+  overlay.classList.add('open');
+  openModalFocus(overlay);
 }
-function closeAccountNameModal() { document.getElementById('modal-account-name').classList.remove('open'); }
+function closeAccountNameModal() {
+  const overlay = document.getElementById('modal-account-name');
+  overlay.classList.remove('open');
+  closeModalFocus(overlay);
+}
+registerModalCloser('modal-account-name', closeAccountNameModal);
 async function saveAccountName() {
   const name = document.getElementById('acct-name-input').value.trim();
   if (!name) { markFieldError('acct-name-input', 'err_name_required'); return; }
@@ -3374,10 +3430,17 @@ function openEditJob(id) {
   clearFieldErrors();
   openJobModal();
 }
-function openJobModal() { document.getElementById('modal-job').classList.add('open'); }
-function closeJobModal() {
-  document.getElementById('modal-job').classList.remove('open');
+function openJobModal() {
+  const overlay = document.getElementById('modal-job');
+  overlay.classList.add('open');
+  openModalFocus(overlay);
 }
+function closeJobModal() {
+  const overlay = document.getElementById('modal-job');
+  overlay.classList.remove('open');
+  closeModalFocus(overlay);
+}
+registerModalCloser('modal-job', closeJobModal);
 
 function clearFieldErrors() {
   document.querySelectorAll('.field-invalid').forEach(el => el.classList.remove('field-invalid'));
@@ -4544,8 +4607,11 @@ function markJobLost(jobId) {
       <button type="button" class="btn-danger" id="lost-cancel" style="border-color:var(--border-mid);color:var(--text3)">${htmlEsc(t('lost_cancel_btn'))}</button>
     </div>`;
   document.body.appendChild(overlay);
-  document.getElementById('lost-cancel').addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  const closeLostModal = () => { overlay.remove(); closeModalFocus(overlay); };
+  document.getElementById('lost-cancel').addEventListener('click', closeLostModal);
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeLostModal(); });
+  registerModalCloser('modal-lost', closeLostModal);
+  openModalFocus(overlay);
 }
 window.markJobLost = markJobLost;
 
@@ -4563,6 +4629,7 @@ async function confirmMarkJobLost(jobId) {
   const selBtn = overlay ? overlay.querySelector('#lost-reasons button.seg-active') : null;
   const reason = selBtn ? selBtn.dataset.reason : null;
   overlay?.remove();
+  closeModalFocus(overlay);
   const j = jobs.find(x => x.id === jobId);
   if (!j || jobComplete(j)) return;
   j.complete = true;
@@ -6300,11 +6367,21 @@ async function quickCheckIn(clientId) {
 }
 window.quickCheckIn = quickCheckIn;
 
-function openCustomerModal() { document.getElementById('modal-customer').classList.add('open'); }
+function openCustomerModal() {
+  const overlay = document.getElementById('modal-customer');
+  overlay.classList.add('open');
+  openModalFocus(overlay);
+}
 // Always resets the pending job->customer link flag: cancelling (or clicking
 // outside) the "add a new client" flow started from the session form must not
 // leave a stale flag that could mis-link some unrelated later save.
-function closeCustomerModal() { window.__pendingJobCustomerLink = false; document.getElementById('modal-customer').classList.remove('open'); }
+function closeCustomerModal() {
+  window.__pendingJobCustomerLink = false;
+  const overlay = document.getElementById('modal-customer');
+  overlay.classList.remove('open');
+  closeModalFocus(overlay);
+}
+registerModalCloser('modal-customer', closeCustomerModal);
 function openAddCustomer() {
   document.getElementById('cust-modal-title').textContent = t('add_customer');
   document.getElementById('c-edit-id').value = '';
@@ -6478,8 +6555,18 @@ function renderServices() {
     </div>`;
   }).join('') + '</div>';
 }
-function openServiceModal() { document.getElementById('modal-service').classList.add('open'); }
-function closeServiceModal() { window.__pendingJobServiceLink = false; document.getElementById('modal-service').classList.remove('open'); }
+function openServiceModal() {
+  const overlay = document.getElementById('modal-service');
+  overlay.classList.add('open');
+  openModalFocus(overlay);
+}
+function closeServiceModal() {
+  window.__pendingJobServiceLink = false;
+  const overlay = document.getElementById('modal-service');
+  overlay.classList.remove('open');
+  closeModalFocus(overlay);
+}
+registerModalCloser('modal-service', closeServiceModal);
 // Toggles the service/product segmented control — same shape as
 // #modal-appt's setApptType(), a hidden input (#sv-kind) carries the current
 // value and the product-only fields container is shown/hidden alongside it.
