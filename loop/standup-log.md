@@ -266,3 +266,61 @@ app-hang risk) — next HIGH item per Researcher-Squad's sequencing
 (a11y/reliability after perf). Skip QA-Squad, Researcher-Squad, and
 UX-UI-Designer-Squad — nothing new to verify yet, backlog well-stocked,
 no UI-shaped item.
+
+**Post-standup-5 activity**: The Advisor dispatched this cycle cleared
+its full queue this time (no gap like sprint 4) — reviewed and merged
+#99 (standup-4 log, catching and fixing a missing P2 label), #100
+(TSK-029, with a real correctness pass tracing map-build ordering and
+mutation-safety, not just "tests pass"), and #101 (standup-5 log).
+Engineer-Squad landed **PR #102** (TSK-030: wired `request.onerror` into
+`dbAll`/`dbGet`/`dbDel`/`dbGetByUsername`, which previously left their
+Promises permanently unsettled — not even rejected — on any IndexedDB
+read failure, silently hanging `reload()` mid-boot or mid-render with no
+error, toast, or retry; new `check-db-error-handling.js` verified against
+the pre-fix code first to confirm it actually catches the bug: 4/4 hung
+before the fix, 6/6 pass after). Full battery green (18 Node + 37
+Playwright). End of sprint 5: zero open PRs, clean.
+
+---
+
+## Standup #6 — 2026-08-27 (~00:34 UTC, scheduled)
+
+**Backlog (`loop/backlog-inbox.md`)**: 46 task_items total. 26 shipped
+(25 as of standup 5, plus TSK-030 built this cycle as PR #102, not yet
+merged). 13 items from epoch 3 remain fully untouched: TSK-031 (HIGH —
+modal focus management), TSK-032 (HIGH — i18n leak onto a real Thai
+invoice), TSK-036-046 minus 033/034/035/029/030 (11 MEDIUM/LOW items).
+
+**Open PRs**: #102 (TSK-030, clean, P1 labeled, base already current).
+
+**Squad status**: Engineer-Squad active this arc (TSK-029/030 both
+shipped since standup 4); its handshake file still hasn't been updated by
+either of the last two sessions — noted, not blocking, but worth flagging
+to the next Engineer-Squad dispatch to catch up if it has spare context.
+QA-Tester-Squad, Researcher-Squad, UX-UI-Designer-Squad all idle,
+unchanged.
+
+**Cross-squad requests addressed to Owner**: none new. TSK-036's
+non-blocking sub-question still outstanding, still not urgent — 5
+standups running now without the owner needing to weigh in on anything,
+which reads as a genuinely healthy backlog (Researcher-Squad's epoch-3
+sweep produced 18 items with zero ambiguous ones).
+
+**Rate-limit check**: `allowed_warning` (7-day window) — unchanged across
+all six standups since sprint 1, not worsening. Session cost has grown
+steadily (~$20 cumulative per the session's own usage field as of this
+standup) — worth keeping an eye on but not yet a reason to slow the
+cadence.
+
+**PM decision — sprint 6 priority**: Dispatch **Engineer-Squad** for
+**TSK-031** (modals have no focus management — no initial focus, no trap,
+no Escape-to-close, no return-focus on close, across all 6 modal
+surfaces) — the last remaining HIGH item after TSK-029/030, ahead of
+TSK-032 (also HIGH but narrower — one i18n string) per no strong ordering
+preference between the two; picking TSK-031 first since it's the larger
+of the two remaining HIGH items and best tackled before backlog capacity
+gets consumed by the 11 MEDIUM/LOW items. Dispatch one **PR Advisor**
+session at cycle end to review/merge #102 plus this cycle's new PRs.
+Skip QA-Squad, Researcher-Squad, and UX-UI-Designer-Squad — nothing new
+to verify yet, backlog well-stocked, no UI-direction-shaped item (TSK-031
+is a mechanical accessibility fix, not a design decision).
